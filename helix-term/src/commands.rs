@@ -81,10 +81,24 @@ pub struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
+    /// Composes the current and given callbacks.
+    ///
+    /// If there is currently a callback, the existing callback will be executed first and
+    /// then the given callback.
+    pub fn compose_callback(&mut self, callback: crate::compositor::Callback) {
+        self.callback = match self.callback.take() {
+            Some(existing_callback) => Some(Box::new(|compositor, cx| {
+                existing_callback(compositor, cx);
+                callback(compositor, cx);
+            })),
+            None => Some(callback),
+        };
+    }
+
     /// Push a new component onto the compositor.
     pub fn push_layer(&mut self, component: Box<dyn Component>) {
-        self.callback = Some(Box::new(|compositor: &mut Compositor, _| {
-            compositor.push(component)
+        self.compose_callback(Box::new(|compositor, _| {
+            compositor.push(component);
         }));
     }
 
@@ -187,7 +201,7 @@ impl MappableCommand {
             Self::Static { fun, .. } => (fun)(cx),
             Self::Macro { sequence } => {
                 let keys = sequence.clone();
-                cx.callback = Some(Box::new(move |compositor, cx| {
+                cx.compose_callback(Box::new(move |compositor, cx| {
                     for &key in keys.iter() {
                         compositor.handle_event(&compositor::Event::Key(key), cx);
                     }
@@ -2497,7 +2511,7 @@ impl ui::menu::Item for MappableCommand {
 }
 
 pub fn command_palette(cx: &mut Context) {
-    cx.callback = Some(Box::new(
+    cx.compose_callback(Box::new(
         move |compositor: &mut Compositor, cx: &mut compositor::Context| {
             let keymap = compositor.find::<ui::EditorView>().unwrap().keymaps.map()
                 [&cx.editor.mode]
@@ -2530,7 +2544,7 @@ pub fn command_palette(cx: &mut Context) {
 
 fn last_picker(cx: &mut Context) {
     // TODO: last picker does not seem to work well with buffer_picker
-    cx.callback = Some(Box::new(|compositor, cx| {
+    cx.compose_callback(Box::new(|compositor, cx| {
         if let Some(picker) = compositor.last_picker.take() {
             compositor.push(picker);
         } else {
@@ -5076,7 +5090,7 @@ fn replay_macro(cx: &mut Context) {
     cx.editor.macro_replaying.push(reg);
 
     let count = cx.count();
-    cx.callback = Some(Box::new(move |compositor, cx| {
+    cx.compose_callback(Box::new(move |compositor, cx| {
         for _ in 0..count {
             for &key in keys.iter() {
                 compositor.handle_event(&compositor::Event::Key(key), cx);
