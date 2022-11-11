@@ -23,7 +23,6 @@ g = { a = "code_action" } # Maps `ga` to show possible code actions
 "A-x" = "normal_mode" # Maps Alt-X to enter normal mode
 j = { k = "normal_mode" } # Maps `jk` to exit insert mode
 ```
-> NOTE: Typable commands can also be remapped, remember to keep the `:` prefix to indicate it's a typable command.
 
 Ctrl, Shift and Alt modifiers are encoded respectively with the prefixes
 `C-`, `S-` and `A-`. Special keys are encoded as follows:
@@ -50,5 +49,34 @@ Ctrl, Shift and Alt modifiers are encoded respectively with the prefixes
 
 Keys can be disabled by binding them to the `no_op` command.
 
-Commands can be found at [Keymap](https://docs.helix-editor.com/keymap.html) Commands.
-> Commands can also be found in the source code at [`helix-term/src/commands.rs`](https://github.com/helix-editor/helix/blob/master/helix-term/src/commands.rs) at the invocation of `static_commands!` macro and the `TypableCommandList`.
+Commands can be found in the [Keymap section](./keymap.html).
+
+> Commands and typable commands can also be found in the source code at
+> [`helix-term/src/commands.rs`](https://github.com/helix-editor/helix/blob/master/helix-term/src/commands.rs)
+> at the invocation of `static_commands!` macro or in the command picker
+> (`<space>?`).
+
+### Typable commands
+
+Typable commands like `:write` or `:buffer-close` can be mapped as well.
+Remember to keep the `:` to indicate it's a typable command.
+
+```toml
+[keys.normal]
+D = ":buffer-close"
+```
+
+Typable commands can be found in the [Commands section](./commands.html).
+
+### Macro key-sequences
+
+You can also bind keys to macro key-sequences. Start the command with `@` to
+indicate that it's a macro key-sequence. Then write any number of keys.
+
+If any keys need more than one character to write, surround the key in angle
+brackets.
+
+```toml
+[keys.normal]
+D = "@t<ret>d" # deletes to the end of line
+```
