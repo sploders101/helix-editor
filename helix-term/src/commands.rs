@@ -210,17 +210,18 @@ impl MappableCommand {
         copy_selection_on_prev_line, "Copy selection on previous line",
         move_next_word_start, "Move to start of next word",
         move_prev_word_start, "Move to start of previous word",
-        move_prev_word_end, "Move to end of previous word",
         move_next_word_end, "Move to end of next word",
+        move_prev_word_end, "Move to end of previous word",
         move_next_long_word_start, "Move to start of next long word",
         move_prev_long_word_start, "Move to start of previous long word",
         move_next_long_word_end, "Move to end of next long word",
         extend_next_word_start, "Extend to start of next word",
         extend_prev_word_start, "Extend to start of previous word",
+        extend_next_word_end, "Extend to end of next word",
+        extend_prev_word_end, "Extend to end of previous word",
         extend_next_long_word_start, "Extend to start of next long word",
         extend_prev_long_word_start, "Extend to start of previous long word",
         extend_next_long_word_end, "Extend to end of next long word",
-        extend_next_word_end, "Extend to end of next word",
         find_till_char, "Move till next occurrence of char",
         find_next_char, "Move to next occurrence of char",
         extend_till_char, "Extend till next occurrence of char",
@@ -310,8 +311,7 @@ impl MappableCommand {
         goto_line_end, "Goto line end",
         goto_next_buffer, "Goto next buffer",
         goto_previous_buffer, "Goto previous buffer",
-        // TODO: different description ?
-        goto_line_end_newline, "Goto line end",
+        goto_line_end_newline, "Goto newline at line end",
         goto_first_nonwhitespace, "Goto first non-blank in line",
         trim_selections, "Trim whitespace from selections",
         extend_to_line_start, "Extend to line start",
@@ -1094,6 +1094,10 @@ fn extend_prev_word_start(cx: &mut Context) {
 
 fn extend_next_word_end(cx: &mut Context) {
     extend_word_impl(cx, movement::move_next_word_end)
+}
+
+fn extend_prev_word_end(cx: &mut Context) {
+    extend_word_impl(cx, movement::move_prev_word_end)
 }
 
 fn extend_next_long_word_start(cx: &mut Context) {
@@ -3788,7 +3792,7 @@ fn format_selections(cx: &mut Context) {
     let (view, doc) = current!(cx.editor);
 
     // via lsp if available
-    // else via tree-sitter indentation calculations
+    // TODO: else via tree-sitter indentation calculations
 
     let language_server = match doc.language_server() {
         Some(language_server) => language_server,
@@ -3801,33 +3805,34 @@ fn format_selections(cx: &mut Context) {
         .map(|range| range_to_lsp_range(doc.text(), *range, language_server.offset_encoding()))
         .collect();
 
-    // TODO: all of the TODO's and commented code inside the loop,
-    // to make this actually work.
-    for _range in ranges {
-        let _language_server = match doc.language_server() {
-            Some(language_server) => language_server,
-            None => return,
-        };
-        // TODO: handle fails
-        // TODO: concurrent map
-
-        // TODO: need to block to get the formatting
-
-        // let edits = block_on(language_server.text_document_range_formatting(
-        //     doc.identifier(),
-        //     range,
-        //     lsp::FormattingOptions::default(),
-        // ))
-        // .unwrap_or_default();
-
-        // let transaction = helix_lsp::util::generate_transaction_from_edits(
-        //     doc.text(),
-        //     edits,
-        //     language_server.offset_encoding(),
-        // );
-
-        // apply_transaction(&transaction, doc, view);
+    if ranges.len() != 1 {
+        cx.editor
+            .set_error("format_selections only supports a single selection for now");
+        return;
     }
+
+    // TODO: handle fails
+    // TODO: concurrent map over all ranges
+
+    let range = ranges[0];
+
+    let edits = tokio::task::block_in_place(|| {
+        helix_lsp::block_on(language_server.text_document_range_formatting(
+            doc.identifier(),
+            range,
+            lsp::FormattingOptions::default(),
+            None,
+        ))
+    })
+    .unwrap_or_default();
+
+    let transaction = helix_lsp::util::generate_transaction_from_edits(
+        doc.text(),
+        edits,
+        language_server.offset_encoding(),
+    );
+
+    apply_transaction(&transaction, doc, view);
 }
 
 fn join_selections_inner(cx: &mut Context, select_space: bool) {
@@ -4902,14 +4907,18 @@ fn add_newline_impl(cx: &mut Context, open: Open) {
     apply_transaction(&transaction, doc, view);
 }
 
+enum IncrementDirection {
+    Increase,
+    Decrease,
+}
 /// Increment object under cursor by count.
 fn increment(cx: &mut Context) {
-    increment_impl(cx, cx.count() as i64);
+    increment_impl(cx, IncrementDirection::Increase);
 }
 
 /// Decrement object under cursor by count.
 fn decrement(cx: &mut Context) {
-    increment_impl(cx, -(cx.count() as i64));
+    increment_impl(cx, IncrementDirection::Decrease);
 }
 
 /// This function differs from find_next_char_impl in that it stops searching at the newline, but also
@@ -4933,7 +4942,7 @@ fn find_next_char_until_newline<M: CharMatcher>(
 }
 
 /// Decrement object under cursor by `amount`.
-fn increment_impl(cx: &mut Context, amount: i64) {
+fn increment_impl(cx: &mut Context, increment_direction: IncrementDirection) {
     // TODO: when incrementing or decrementing a number that gets a new digit or lose one, the
     // selection is updated improperly.
     find_char_impl(
@@ -4944,6 +4953,17 @@ fn increment_impl(cx: &mut Context, amount: i64) {
         char::is_ascii_digit,
         1,
     );
+
+    // Increase by 1 if `IncrementDirection` is `Increase`
+    // Decrease by 1 if `IncrementDirection` is `Decrease`
+    let sign = match increment_direction {
+        IncrementDirection::Increase => 1,
+        IncrementDirection::Decrease => -1,
+    };
+    let mut amount = sign * cx.count() as i64;
+
+    // If the register is `#` then increase or decrease the `amount` by 1 per element
+    let increase_by = if cx.register == Some('#') { sign } else { 0 };
 
     let (view, doc) = current!(cx.editor);
     let selection = doc.selection(view.id);
@@ -4963,6 +4983,8 @@ fn increment_impl(cx: &mut Context, amount: i64) {
                 };
 
             let (range, new_text) = incrementor.increment(amount);
+
+            amount += increase_by;
 
             Some((range.from(), range.to(), Some(new_text)))
         })
