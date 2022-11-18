@@ -161,7 +161,9 @@ pub enum MappableCommand {
         doc: &'static str,
     },
     Macro {
+        name: String,
         sequence: Vec<KeyEvent>,
+        doc: String,
     },
 }
 
@@ -199,7 +201,7 @@ impl MappableCommand {
                 }
             }
             Self::Static { fun, .. } => (fun)(cx),
-            Self::Macro { sequence } => {
+            Self::Macro { sequence, .. } => {
                 let keys = sequence.clone();
                 cx.compose_callback(Box::new(move |compositor, cx| {
                     for &key in keys.iter() {
@@ -214,9 +216,7 @@ impl MappableCommand {
         match &self {
             Self::Typable { name, .. } => name,
             Self::Static { name, .. } => name,
-            // Documentation for macros is not generated because no built-in commands
-            // are currently implemented as macros.
-            Self::Macro { .. } => unimplemented!(),
+            Self::Macro { name, .. } => name,
         }
     }
 
@@ -224,9 +224,7 @@ impl MappableCommand {
         match &self {
             Self::Typable { doc, .. } => doc,
             Self::Static { doc, .. } => doc,
-            // Documentation for macros is not generated because no built-in commands
-            // are currently implemented as macros.
-            Self::Macro { .. } => unimplemented!(),
+            Self::Macro { doc, .. } => doc,
         }
     }
 
@@ -512,8 +510,13 @@ impl std::str::FromStr for MappableCommand {
                 })
                 .ok_or_else(|| anyhow!("No TypableCommand named '{}'", s))
         } else if let Some(suffix) = s.strip_prefix('@') {
-            helix_view::input::parse_macro(suffix)
-                .map(|sequence| MappableCommand::Macro { sequence })
+            let text = suffix.to_string();
+
+            helix_view::input::parse_macro(suffix).map(|sequence| MappableCommand::Macro {
+                name: text.clone(),
+                doc: text,
+                sequence,
+            })
         } else {
             MappableCommand::STATIC_COMMAND_LIST
                 .iter()

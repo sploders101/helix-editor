@@ -284,9 +284,9 @@ impl Keymap {
                         .entry(name.to_string())
                         .or_default()
                         .push(keys.clone()),
-                    // Documentation for macros is not generated because no built-in commands
-                    // are currently implemented as macros.
-                    MappableCommand::Macro { .. } => unimplemented!(),
+                    MappableCommand::Macro { name, .. } => {
+                        cmd_map.entry(name.into()).or_default().push(keys.clone())
+                    }
                 },
                 KeyTrie::Node(next) => {
                     for (key, trie) in &next.map {

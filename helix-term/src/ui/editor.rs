@@ -1473,9 +1473,14 @@ impl Component for EditorView {
                 ) {
                     // Check for an on-next-key callback. If there is one and the next command
                     // is a macro, feed the first key-event into the callback directly.
-                    (Some(on_next_key), commands::MappableCommand::Macro { sequence })
-                        if !sequence.is_empty() =>
-                    {
+                    (
+                        Some(on_next_key),
+                        commands::MappableCommand::Macro {
+                            sequence,
+                            name,
+                            doc,
+                        },
+                    ) if !sequence.is_empty() => {
                         on_next_key(&mut cx, sequence[0]);
                         self.pseudo_pending.clear();
 
@@ -1484,6 +1489,8 @@ impl Component for EditorView {
                         if sequence.len() > 1 {
                             let command = commands::MappableCommand::Macro {
                                 sequence: sequence[1..sequence.len()].to_vec(),
+                                name,
+                                doc,
                             };
                             self.pending_commands.push(command);
                         }
