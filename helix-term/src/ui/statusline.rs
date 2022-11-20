@@ -1,4 +1,5 @@
 use helix_core::{coords_at_pos, encoding, Position};
+use helix_lsp::lsp::DiagnosticSeverity;
 use helix_view::{
     document::{Mode, SCRATCH_BUFFER_NAME},
     graphics::Rect,
@@ -68,7 +69,9 @@ pub fn render(context: &mut RenderContext, viewport: Rect, surface: &mut Surface
 
     // Left side of the status line.
 
-    let element_ids = &context.editor.config().statusline.left;
+    let config = context.editor.config();
+
+    let element_ids = &config.statusline.left;
     element_ids
         .iter()
         .map(|element_id| get_render_function(*element_id))
@@ -83,7 +86,7 @@ pub fn render(context: &mut RenderContext, viewport: Rect, surface: &mut Surface
 
     // Right side of the status line.
 
-    let element_ids = &context.editor.config().statusline.right;
+    let element_ids = &config.statusline.right;
     element_ids
         .iter()
         .map(|element_id| get_render_function(*element_id))
@@ -101,7 +104,7 @@ pub fn render(context: &mut RenderContext, viewport: Rect, surface: &mut Surface
 
     // Center of the status line.
 
-    let element_ids = &context.editor.config().statusline.center;
+    let element_ids = &config.statusline.center;
     element_ids
         .iter()
         .map(|element_id| get_render_function(*element_id))
@@ -141,6 +144,7 @@ where
         helix_view::editor::StatusLineElement::FileLineEnding => render_file_line_ending,
         helix_view::editor::StatusLineElement::FileType => render_file_type,
         helix_view::editor::StatusLineElement::Diagnostics => render_diagnostics,
+        helix_view::editor::StatusLineElement::WorkspaceDiagnostics => render_workspace_diagnostics,
         helix_view::editor::StatusLineElement::Selections => render_selections,
         helix_view::editor::StatusLineElement::PrimarySelectionLength => {
             render_primary_selection_length
@@ -158,7 +162,8 @@ where
     F: Fn(&mut RenderContext, String, Option<Style>) + Copy,
 {
     let visible = context.focused;
-    let modenames = &context.editor.config().statusline.mode;
+    let config = context.editor.config();
+    let modenames = &config.statusline.mode;
     write(
         context,
         format!(
@@ -174,7 +179,7 @@ where
                 "   "
             }
         ),
-        if visible && context.editor.config().color_modes {
+        if visible && config.color_modes {
             match context.editor.mode() {
                 Mode::Insert => Some(context.editor.theme.get("ui.statusline.insert")),
                 Mode::Select => Some(context.editor.theme.get("ui.statusline.select")),
@@ -225,6 +230,48 @@ where
             }
             counts
         });
+
+    if warnings > 0 {
+        write(
+            context,
+            "●".to_string(),
+            Some(context.editor.theme.get("warning")),
+        );
+        write(context, format!(" {} ", warnings), None);
+    }
+
+    if errors > 0 {
+        write(
+            context,
+            "●".to_string(),
+            Some(context.editor.theme.get("error")),
+        );
+        write(context, format!(" {} ", errors), None);
+    }
+}
+
+fn render_workspace_diagnostics<F>(context: &mut RenderContext, write: F)
+where
+    F: Fn(&mut RenderContext, String, Option<Style>) + Copy,
+{
+    let (warnings, errors) =
+        context
+            .editor
+            .diagnostics
+            .values()
+            .flatten()
+            .fold((0, 0), |mut counts, diag| {
+                match diag.severity {
+                    Some(DiagnosticSeverity::WARNING) => counts.0 += 1,
+                    Some(DiagnosticSeverity::ERROR) | None => counts.1 += 1,
+                    _ => {}
+                }
+                counts
+            });
+
+    if warnings > 0 || errors > 0 {
+        write(context, format!(" {} ", "W"), None);
+    }
 
     if warnings > 0 {
         write(
