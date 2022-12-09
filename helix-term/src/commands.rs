@@ -3,6 +3,7 @@ pub(crate) mod lsp;
 pub(crate) mod typed;
 
 pub use dap::*;
+use helix_vcs::Hunk;
 pub use lsp::*;
 use tui::text::Spans;
 pub use typed::*;
@@ -308,6 +309,10 @@ impl MappableCommand {
         goto_last_diag, "Goto last diagnostic",
         goto_next_diag, "Goto next diagnostic",
         goto_prev_diag, "Goto previous diagnostic",
+        goto_next_change, "Goto next change",
+        goto_prev_change, "Goto previous change",
+        goto_first_change, "Goto first change",
+        goto_last_change, "Goto last change",
         goto_line_start, "Goto line start",
         goto_line_end, "Goto line end",
         goto_next_buffer, "Goto next buffer",
@@ -402,8 +407,8 @@ impl MappableCommand {
         select_textobject_inner, "Select inside object",
         goto_next_function, "Goto next function",
         goto_prev_function, "Goto previous function",
-        goto_next_class, "Goto next class",
-        goto_prev_class, "Goto previous class",
+        goto_next_class, "Goto next type definition",
+        goto_prev_class, "Goto previous type definition",
         goto_next_parameter, "Goto next parameter",
         goto_prev_parameter, "Goto previous parameter",
         goto_next_comment, "Goto next comment",
@@ -1670,12 +1675,7 @@ fn search_impl(
         };
 
         doc.set_selection(view.id, selection);
-        // TODO: is_cursor_in_view does the same calculation as ensure_cursor_in_view
-        if view.is_cursor_in_view(doc, 0) {
-            view.ensure_cursor_in_view(doc, scrolloff);
-        } else {
-            align_view(doc, view, Align::Center)
-        }
+        view.ensure_cursor_in_view_center(doc, scrolloff);
     };
 }
 
@@ -2008,7 +2008,7 @@ fn global_search(cx: &mut Context) {
                         align_view(doc, view, Align::Center);
                     },
                     |_editor, FileResult { path, line_num }| {
-                        Some((path.clone(), Some((*line_num, *line_num))))
+                        Some((path.clone().into(), Some((*line_num, *line_num))))
                     },
                 );
                 compositor.push(Box::new(overlayed(picker)));
@@ -2386,8 +2386,8 @@ fn buffer_picker(cx: &mut Context) {
     let picker = FilePicker::new(
         cx.editor
             .documents
-            .iter()
-            .map(|(_, doc)| new_meta(doc))
+            .values()
+            .map(|doc| new_meta(doc))
             .collect(),
         (),
         |cx, meta, action| {
@@ -2400,7 +2400,7 @@ fn buffer_picker(cx: &mut Context) {
                 .selection(view_id)
                 .primary()
                 .cursor_line(doc.text().slice(..));
-            Some((meta.path.clone()?, Some((line, line))))
+            Some((meta.id.into(), Some((line, line))))
         },
     );
     cx.push_layer(Box::new(overlayed(picker)));
@@ -2467,7 +2467,6 @@ fn jumplist_picker(cx: &mut Context) {
             .views()
             .flat_map(|(view, _)| {
                 view.jumps
-                    .get()
                     .iter()
                     .map(|(doc_id, selection)| new_meta(view, *doc_id, selection.clone()))
             })
@@ -2475,13 +2474,15 @@ fn jumplist_picker(cx: &mut Context) {
         (),
         |cx, meta, action| {
             cx.editor.switch(meta.id, action);
+            let config = cx.editor.config();
             let (view, doc) = current!(cx.editor);
             doc.set_selection(view.id, meta.selection.clone());
+            view.ensure_cursor_in_view_center(doc, config.scrolloff);
         },
         |editor, meta| {
             let doc = &editor.documents.get(&meta.id)?;
             let line = meta.selection.primary().cursor_line(doc.text().slice(..));
-            Some((meta.path.clone()?, Some((line, line))))
+            Some((meta.path.clone()?.into(), Some((line, line))))
         },
     );
     cx.push_layer(Box::new(overlayed(picker)));
@@ -2605,7 +2606,7 @@ async fn make_format_callback(
         if let Ok(format) = format {
             if doc.version() == doc_version {
                 apply_transaction(&format, doc, view);
-                doc.append_changes_to_history(view.id);
+                doc.append_changes_to_history(view);
                 doc.detect_indent_and_line_ending();
                 view.ensure_cursor_in_view(doc, scrolloff);
             } else {
@@ -2956,6 +2957,100 @@ fn goto_prev_diag(cx: &mut Context) {
     goto_pos(editor, pos);
 }
 
+fn goto_first_change(cx: &mut Context) {
+    goto_first_change_impl(cx, false);
+}
+
+fn goto_last_change(cx: &mut Context) {
+    goto_first_change_impl(cx, true);
+}
+
+fn goto_first_change_impl(cx: &mut Context, reverse: bool) {
+    let editor = &mut cx.editor;
+    let (_, doc) = current!(editor);
+    if let Some(handle) = doc.diff_handle() {
+        let hunk = {
+            let hunks = handle.hunks();
+            let idx = if reverse {
+                hunks.len().saturating_sub(1)
+            } else {
+                0
+            };
+            hunks.nth_hunk(idx)
+        };
+        if hunk != Hunk::NONE {
+            let pos = doc.text().line_to_char(hunk.after.start as usize);
+            goto_pos(editor, pos)
+        }
+    }
+}
+
+fn goto_next_change(cx: &mut Context) {
+    goto_next_change_impl(cx, Direction::Forward)
+}
+
+fn goto_prev_change(cx: &mut Context) {
+    goto_next_change_impl(cx, Direction::Backward)
+}
+
+fn goto_next_change_impl(cx: &mut Context, direction: Direction) {
+    let count = cx.count() as u32 - 1;
+    let motion = move |editor: &mut Editor| {
+        let (view, doc) = current!(editor);
+        let doc_text = doc.text().slice(..);
+        let diff_handle = if let Some(diff_handle) = doc.diff_handle() {
+            diff_handle
+        } else {
+            editor.set_status("Diff is not available in current buffer");
+            return;
+        };
+
+        let selection = doc.selection(view.id).clone().transform(|range| {
+            let cursor_line = range.cursor_line(doc_text) as u32;
+
+            let hunks = diff_handle.hunks();
+            let hunk_idx = match direction {
+                Direction::Forward => hunks
+                    .next_hunk(cursor_line)
+                    .map(|idx| (idx + count).min(hunks.len() - 1)),
+                Direction::Backward => hunks
+                    .prev_hunk(cursor_line)
+                    .map(|idx| idx.saturating_sub(count)),
+            };
+            // TODO refactor with let..else once MSRV reaches 1.65
+            let hunk_idx = if let Some(hunk_idx) = hunk_idx {
+                hunk_idx
+            } else {
+                return range;
+            };
+            let hunk = hunks.nth_hunk(hunk_idx);
+
+            let hunk_start = doc_text.line_to_char(hunk.after.start as usize);
+            let hunk_end = if hunk.after.is_empty() {
+                hunk_start + 1
+            } else {
+                doc_text.line_to_char(hunk.after.end as usize)
+            };
+            let new_range = Range::new(hunk_start, hunk_end);
+            if editor.mode == Mode::Select {
+                let head = if new_range.head < range.anchor {
+                    new_range.anchor
+                } else {
+                    new_range.head
+                };
+
+                Range::new(range.anchor, head)
+            } else {
+                new_range.with_direction(direction)
+            }
+        });
+
+        doc.set_selection(view.id, selection)
+    };
+    motion(cx.editor);
+    cx.editor.last_motion = Some(Motion(Box::new(motion)));
+}
+
 pub mod insert {
     use super::*;
     pub type Hook = fn(&Rope, &Selection, char) -> Option<Transaction>;
@@ -2994,6 +3089,11 @@ pub mod insert {
     }
 
     fn language_server_completion(cx: &mut Context, ch: char) {
+        let config = cx.editor.config();
+        if !config.auto_completion {
+            return;
+        }
+
         use helix_lsp::lsp;
         // if ch matches completion char, trigger completion
         let doc = doc_mut!(cx.editor);
@@ -3126,40 +3226,59 @@ pub mod insert {
             let curr = contents.get_char(pos).unwrap_or(' ');
 
             let current_line = text.char_to_line(pos);
-            let indent = indent::indent_for_newline(
-                doc.language_config(),
-                doc.syntax(),
-                &doc.indent_style,
-                doc.tab_width(),
-                text,
-                current_line,
-                pos,
-                current_line,
-            );
-            let mut text = String::new();
-            // If we are between pairs (such as brackets), we want to
-            // insert an additional line which is indented one level
-            // more and place the cursor there
-            let on_auto_pair = doc
-                .auto_pairs(cx.editor)
-                .and_then(|pairs| pairs.get(prev))
-                .and_then(|pair| if pair.close == curr { Some(pair) } else { None })
-                .is_some();
+            let line_is_only_whitespace = text
+                .line(current_line)
+                .chars()
+                .all(|char| char.is_ascii_whitespace());
 
-            let local_offs = if on_auto_pair {
-                let inner_indent = indent.clone() + doc.indent_style.as_str();
-                text.reserve_exact(2 + indent.len() + inner_indent.len());
-                text.push_str(doc.line_ending.as_str());
-                text.push_str(&inner_indent);
-                let local_offs = text.chars().count();
-                text.push_str(doc.line_ending.as_str());
-                text.push_str(&indent);
-                local_offs
+            let mut new_text = String::new();
+
+            // If the current line is all whitespace, insert a line ending at the beginning of
+            // the current line. This makes the current line empty and the new line contain the
+            // indentation of the old line.
+            let (from, to, local_offs) = if line_is_only_whitespace {
+                let line_start = text.line_to_char(current_line);
+                new_text.push_str(doc.line_ending.as_str());
+
+                (line_start, line_start, new_text.chars().count())
             } else {
-                text.reserve_exact(1 + indent.len());
-                text.push_str(doc.line_ending.as_str());
-                text.push_str(&indent);
-                text.chars().count()
+                let indent = indent::indent_for_newline(
+                    doc.language_config(),
+                    doc.syntax(),
+                    &doc.indent_style,
+                    doc.tab_width(),
+                    text,
+                    current_line,
+                    pos,
+                    current_line,
+                );
+
+                // If we are between pairs (such as brackets), we want to
+                // insert an additional line which is indented one level
+                // more and place the cursor there
+                let on_auto_pair = doc
+                    .auto_pairs(cx.editor)
+                    .and_then(|pairs| pairs.get(prev))
+                    .and_then(|pair| if pair.close == curr { Some(pair) } else { None })
+                    .is_some();
+
+                let local_offs = if on_auto_pair {
+                    let inner_indent = indent.clone() + doc.indent_style.as_str();
+                    new_text.reserve_exact(2 + indent.len() + inner_indent.len());
+                    new_text.push_str(doc.line_ending.as_str());
+                    new_text.push_str(&inner_indent);
+                    let local_offs = new_text.chars().count();
+                    new_text.push_str(doc.line_ending.as_str());
+                    new_text.push_str(&indent);
+                    local_offs
+                } else {
+                    new_text.reserve_exact(1 + indent.len());
+                    new_text.push_str(doc.line_ending.as_str());
+                    new_text.push_str(&indent);
+                    new_text.chars().count()
+                };
+
+                (pos, pos, local_offs)
             };
 
             let new_range = if doc.restore_cursor {
@@ -3180,9 +3299,9 @@ pub mod insert {
             // range.replace(|range| range.is_empty(), head); -> fn extend if cond true, new head pos
             // can be used with cx.mode to do replace or extend on most changes
             ranges.push(new_range);
-            global_offs += text.chars().count();
+            global_offs += new_text.chars().count();
 
-            (pos, pos, Some(text.into()))
+            (from, to, Some(new_text.into()))
         });
 
         transaction = transaction.with_selection(Selection::new(ranges, selection.primary_index()));
@@ -3387,7 +3506,7 @@ fn later(cx: &mut Context) {
 
 fn commit_undo_checkpoint(cx: &mut Context) {
     let (view, doc) = current!(cx.editor);
-    doc.append_changes_to_history(view.id);
+    doc.append_changes_to_history(view);
 }
 
 // Yank / Paste
@@ -3507,7 +3626,14 @@ enum Paste {
     Cursor,
 }
 
-fn paste_impl(values: &[String], doc: &mut Document, view: &mut View, action: Paste, count: usize) {
+fn paste_impl(
+    values: &[String],
+    doc: &mut Document,
+    view: &mut View,
+    action: Paste,
+    count: usize,
+    mode: Mode,
+) {
     if values.is_empty() {
         return;
     }
@@ -3539,7 +3665,7 @@ fn paste_impl(values: &[String], doc: &mut Document, view: &mut View, action: Pa
     let mut offset = 0;
     let mut ranges = SmallVec::with_capacity(selection.len());
 
-    let transaction = Transaction::change_by_selection(text, selection, |range| {
+    let mut transaction = Transaction::change_by_selection(text, selection, |range| {
         let pos = match (action, linewise) {
             // paste linewise before
             (Paste::Before, true) => text.line_to_char(text.char_to_line(range.from())),
@@ -3571,7 +3697,9 @@ fn paste_impl(values: &[String], doc: &mut Document, view: &mut View, action: Pa
         (pos, pos, value)
     });
 
-    let transaction = transaction.with_selection(Selection::new(ranges, selection.primary_index()));
+    if mode == Mode::Normal {
+        transaction = transaction.with_selection(Selection::new(ranges, selection.primary_index()));
+    }
 
     apply_transaction(&transaction, doc, view);
 }
@@ -3583,7 +3711,7 @@ pub(crate) fn paste_bracketed_value(cx: &mut Context, contents: String) {
         Mode::Normal => Paste::Before,
     };
     let (view, doc) = current!(cx.editor);
-    paste_impl(&[contents], doc, view, paste, count);
+    paste_impl(&[contents], doc, view, paste, count, cx.editor.mode);
 }
 
 fn paste_clipboard_impl(
@@ -3595,7 +3723,7 @@ fn paste_clipboard_impl(
     let (view, doc) = current!(editor);
     match editor.clipboard_provider.get_contents(clipboard_type) {
         Ok(contents) => {
-            paste_impl(&[contents], doc, view, action, count);
+            paste_impl(&[contents], doc, view, action, count, editor.mode);
             Ok(())
         }
         Err(e) => Err(e.context("Couldn't get system clipboard contents")),
@@ -3690,7 +3818,7 @@ fn replace_selections_with_clipboard_impl(
             });
 
             apply_transaction(&transaction, doc, view);
-            doc.append_changes_to_history(view.id);
+            doc.append_changes_to_history(view);
         }
         Err(e) => return Err(e.context("Couldn't get system clipboard contents")),
     }
@@ -3714,7 +3842,7 @@ fn paste(cx: &mut Context, pos: Paste) {
     let registers = &mut cx.editor.registers;
 
     if let Some(values) = registers.read(reg_name) {
-        paste_impl(values, doc, view, pos, count);
+        paste_impl(values, doc, view, pos, count, cx.editor.mode);
     }
 }
 
@@ -3833,15 +3961,21 @@ fn format_selections(cx: &mut Context) {
 
     let range = ranges[0];
 
-    let edits = tokio::task::block_in_place(|| {
-        helix_lsp::block_on(language_server.text_document_range_formatting(
-            doc.identifier(),
-            range,
-            lsp::FormattingOptions::default(),
-            None,
-        ))
-    })
-    .unwrap_or_default();
+    let request = match language_server.text_document_range_formatting(
+        doc.identifier(),
+        range,
+        lsp::FormattingOptions::default(),
+        None,
+    ) {
+        Some(future) => future,
+        None => {
+            cx.editor
+                .set_error("Language server does not support range formatting");
+            return;
+        }
+    };
+
+    let edits = tokio::task::block_in_place(|| helix_lsp::block_on(request)).unwrap_or_default();
 
     let transaction = helix_lsp::util::generate_transaction_from_edits(
         doc.text(),
@@ -3985,7 +4119,10 @@ pub fn completion(cx: &mut Context) {
 
     let pos = pos_to_lsp_pos(doc.text(), cursor, offset_encoding);
 
-    let future = language_server.completion(doc.identifier(), pos, None);
+    let future = match language_server.completion(doc.identifier(), pos, None) {
+        Some(future) => future,
+        None => return,
+    };
 
     let trigger_offset = cursor;
 
@@ -4209,6 +4346,7 @@ fn match_brackets(cx: &mut Context) {
 
 fn jump_forward(cx: &mut Context) {
     let count = cx.count();
+    let config = cx.editor.config();
     let view = view_mut!(cx.editor);
     let doc_id = view.doc;
 
@@ -4222,12 +4360,13 @@ fn jump_forward(cx: &mut Context) {
         }
 
         doc.set_selection(view.id, selection);
-        align_view(doc, view, Align::Center);
+        view.ensure_cursor_in_view_center(doc, config.scrolloff);
     };
 }
 
 fn jump_backward(cx: &mut Context) {
     let count = cx.count();
+    let config = cx.editor.config();
     let (view, doc) = current!(cx.editor);
     let doc_id = doc.id();
 
@@ -4241,7 +4380,7 @@ fn jump_backward(cx: &mut Context) {
         }
 
         doc.set_selection(view.id, selection);
-        align_view(doc, view, Align::Center);
+        view.ensure_cursor_in_view_center(doc, config.scrolloff);
     };
 }
 
@@ -4520,19 +4659,41 @@ fn select_textobject(cx: &mut Context, objtype: textobject::TextObject) {
                     )
                 };
 
+                if ch == 'g' && doc.diff_handle().is_none() {
+                    editor.set_status("Diff is not available in current buffer");
+                    return;
+                }
+
+                let textobject_change = |range: Range| -> Range {
+                    let diff_handle = doc.diff_handle().unwrap();
+                    let hunks = diff_handle.hunks();
+                    let line = range.cursor_line(text);
+                    let hunk_idx = if let Some(hunk_idx) = hunks.hunk_at(line as u32, false) {
+                        hunk_idx
+                    } else {
+                        return range;
+                    };
+                    let hunk = hunks.nth_hunk(hunk_idx).after;
+
+                    let start = text.line_to_char(hunk.start as usize);
+                    let end = text.line_to_char(hunk.end as usize);
+                    Range::new(start, end).with_direction(range.direction())
+                };
+
                 let selection = doc.selection(view.id).clone().transform(|range| {
                     match ch {
                         'w' => textobject::textobject_word(text, range, objtype, count, false),
                         'W' => textobject::textobject_word(text, range, objtype, count, true),
-                        'c' => textobject_treesitter("class", range),
+                        't' => textobject_treesitter("class", range),
                         'f' => textobject_treesitter("function", range),
                         'a' => textobject_treesitter("parameter", range),
-                        'o' => textobject_treesitter("comment", range),
-                        't' => textobject_treesitter("test", range),
+                        'c' => textobject_treesitter("comment", range),
+                        'T' => textobject_treesitter("test", range),
                         'p' => textobject::textobject_paragraph(text, range, objtype, count),
                         'm' => textobject::textobject_pair_surround_closest(
                             text, range, objtype, count,
                         ),
+                        'g' => textobject_change(range),
                         // TODO: cancel new ranges if inconsistent surround matches across lines
                         ch if !ch.is_ascii_alphanumeric() => {
                             textobject::textobject_pair_surround(text, range, objtype, ch, count)
@@ -4556,11 +4717,11 @@ fn select_textobject(cx: &mut Context, objtype: textobject::TextObject) {
         ("w", "Word"),
         ("W", "WORD"),
         ("p", "Paragraph"),
-        ("c", "Class (tree-sitter)"),
+        ("t", "Type definition (tree-sitter)"),
         ("f", "Function (tree-sitter)"),
         ("a", "Argument/parameter (tree-sitter)"),
-        ("o", "Comment (tree-sitter)"),
-        ("t", "Test (tree-sitter)"),
+        ("c", "Comment (tree-sitter)"),
+        ("T", "Test (tree-sitter)"),
         ("m", "Closest surrounding pair to cursor"),
         (" ", "... or any character acting as a pair"),
     ];
@@ -4605,6 +4766,7 @@ fn surround_add(cx: &mut Context) {
         let transaction = Transaction::change(doc.text(), changes.into_iter())
             .with_selection(Selection::new(ranges, selection.primary_index()));
         apply_transaction(&transaction, doc, view);
+        exit_select_mode(cx);
     })
 }
 
@@ -4644,6 +4806,7 @@ fn surround_replace(cx: &mut Context) {
                 }),
             );
             apply_transaction(&transaction, doc, view);
+            exit_select_mode(cx);
         });
     })
 }
@@ -4671,6 +4834,7 @@ fn surround_delete(cx: &mut Context) {
         let transaction =
             Transaction::change(doc.text(), change_pos.into_iter().map(|p| (p, p + 1, None)));
         apply_transaction(&transaction, doc, view);
+        exit_select_mode(cx);
     })
 }
 
@@ -4835,15 +4999,24 @@ fn shell(cx: &mut compositor::Context, cmd: &str, behavior: &ShellBehavior) {
     let mut ranges = SmallVec::with_capacity(selection.len());
     let text = doc.text().slice(..);
 
+    let mut shell_output: Option<Tendril> = None;
     let mut offset = 0isize;
-
     for range in selection.ranges() {
-        let fragment = range.slice(text);
-        let (output, success) = match shell_impl(shell, cmd, pipe.then(|| fragment.into())) {
-            Ok(result) => result,
-            Err(err) => {
-                cx.editor.set_error(err.to_string());
-                return;
+        let (output, success) = if let Some(output) = shell_output.as_ref() {
+            (output.clone(), true)
+        } else {
+            let fragment = range.slice(text);
+            match shell_impl(shell, cmd, pipe.then(|| fragment.into())) {
+                Ok(result) => {
+                    if !pipe {
+                        shell_output = Some(result.0.clone());
+                    }
+                    result
+                }
+                Err(err) => {
+                    cx.editor.set_error(err.to_string());
+                    return;
+                }
             }
         };
 
@@ -4876,7 +5049,7 @@ fn shell(cx: &mut compositor::Context, cmd: &str, behavior: &ShellBehavior) {
         let transaction = Transaction::change(doc.text(), changes.into_iter())
             .with_selection(Selection::new(ranges, selection.primary_index()));
         apply_transaction(&transaction, doc, view);
-        doc.append_changes_to_history(view.id);
+        doc.append_changes_to_history(view);
     }
 
     // after replace cursor may be out of bounds, do this to
