@@ -111,6 +111,7 @@
 | `s`                   | Select all regex matches inside selections                        | `select_regex`                       |
 | `S`                   | Split selection into subselections on regex matches               | `split_selection`                    |
 | `Alt-s`               | Split selection on newlines                                       | `split_selection_on_newline`         |
+| `Alt-_ `              | Merge consecutive selections                                      | `merge_consecutive_selections`       |
 | `&`                   | Align selection in columns                                        | `align_selections`                   |
 | `_`                   | Trim whitespace from the selection                                | `trim_selections`                    |
 | `;`                   | Collapse selection onto a single cursor                           | `collapse_selection`                 |
@@ -319,7 +320,7 @@ Mappings in the style of [vim-unimpaired](https://github.com/tpope/vim-unimpaire
 | `]c`     | Go to next comment (**TS**)                  | `goto_next_comment`   |
 | `[c`     | Go to previous comment (**TS**)              | `goto_prev_comment`   |
 | `]T`     | Go to next test (**TS**)                     | `goto_next_test`      |
-| `]T`     | Go to previous test (**TS**)                 | `goto_prev_test`      |
+| `[T`     | Go to previous test (**TS**)                 | `goto_prev_test`      |
 | `]p`     | Go to next paragraph                         | `goto_next_paragraph` |
 | `[p`     | Go to previous paragraph                     | `goto_prev_paragraph` |
 | `]g`     | Go to next change                            | `goto_next_change`    |

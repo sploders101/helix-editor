@@ -61,6 +61,9 @@
 "ui.explorer.focus" = { modifiers = ["reversed"] }
 "ui.explorer.unfocus" = { bg = "secondary_highlight" }
 
+"diagnostic".underline = { color = "orange", style = "curl" }
+"diagnostic.error".underline = { color = "red", style = "curl" }
+
 [palette]
 background = "#282a36"
 background_dark = "#21222c"
