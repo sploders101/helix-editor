@@ -1456,21 +1456,28 @@ impl Component for EditorView {
 
         // check if bufferline should be rendered
         use helix_view::editor::BufferLine;
+        let mut bufferline_area = area.with_height(1);
         let use_bufferline = match config.bufferline {
             BufferLine::Always => true,
             BufferLine::Multiple if cx.editor.documents.len() > 1 => true,
             _ => false,
         };
 
-        if use_bufferline {
-            Self::render_bufferline(cx.editor, area.with_height(1), surface);
-        }
-
         let mut editor_area = area.clip_bottom(1);
         if self.explorer.is_some() && (config.explorer.is_embed()) {
             editor_area = editor_area.clip_left(config.explorer.column_width as u16 + 2);
+            bufferline_area = bufferline_area.clip_left(config.explorer.column_width as u16 + 2);
         }
+
+        if use_bufferline {
+            editor_area = editor_area.clip_top(1);
+        }
+
         cx.editor.resize(editor_area); // -1 from bottom for commandline
+
+        if use_bufferline {
+            Self::render_bufferline(cx.editor, bufferline_area, surface);
+        }
 
         if let Some(explore) = self.explorer.as_mut() {
             if !explore.content.is_focus() && config.explorer.is_embed() {
