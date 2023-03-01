@@ -40,7 +40,8 @@ use anyhow::{Context, Error};
 use crossterm::{
     event::{
         DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
-        EnableFocusChange, EnableMouseCapture, Event as CrosstermEvent,
+        EnableFocusChange, EnableMouseCapture, Event as CrosstermEvent, KeyboardEnhancementFlags,
+        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
     },
     execute, terminal,
     tty::IsTty,
@@ -111,6 +112,9 @@ fn restore_term() -> Result<(), Error> {
     let mut stdout = stdout();
     // reset cursor shape
     write!(stdout, "\x1B[0 q")?;
+    if matches!(terminal::supports_keyboard_enhancement(), Ok(true)) {
+        execute!(stdout, PopKeyboardEnhancementFlags)?;
+    }
     // Ignore errors on disabling, this might trigger on windows if we call
     // disable without calling enable previously
     let _ = execute!(stdout, DisableMouseCapture);
@@ -172,7 +176,7 @@ impl Application {
             area,
             theme_loader.clone(),
             syn_loader.clone(),
-            Box::new(Map::new(Arc::clone(&config), |config: &Config| {
+            Arc::new(Map::new(Arc::clone(&config), |config: &Config| {
                 &config.editor
             })),
         );
@@ -277,10 +281,6 @@ impl Application {
         Ok(app)
     }
 
-    #[cfg(feature = "integration")]
-    async fn render(&mut self) {}
-
-    #[cfg(not(feature = "integration"))]
     async fn render(&mut self) {
         let mut cx = crate::compositor::Context {
             editor: &mut self.editor,
@@ -309,8 +309,10 @@ impl Application {
         let surface = self.terminal.current_buffer_mut();
 
         self.compositor.render(area, surface, &mut cx);
-
         let (pos, kind) = self.compositor.cursor(area, &self.editor);
+        // reset cursor cache
+        self.editor.cursor_cache.set(None);
+
         let pos = pos.map(|pos| (pos.col as u16, pos.row as u16));
         self.terminal.draw(pos, kind).unwrap();
     }
@@ -395,6 +397,13 @@ impl Application {
         // Update all the relevant members in the editor after updating
         // the configuration.
         self.editor.refresh_config();
+
+        // reset view position in case softwrap was enabled/disabled
+        let scrolloff = self.editor.config().scrolloff;
+        for (view, _) in self.editor.tree.views_mut() {
+            let doc = &self.editor.documents[&view.doc];
+            view.ensure_cursor_in_view(doc, scrolloff)
+        }
     }
 
     /// refresh language config after config change
@@ -629,6 +638,11 @@ impl Application {
                 self.compositor
                     .handle_event(&Event::Resize(width, height), &mut cx)
             }
+            // Ignore keyboard release events.
+            CrosstermEvent::Key(crossterm::event::KeyEvent {
+                kind: crossterm::event::KeyEventKind::Release,
+                ..
+            }) => false,
             event => self.compositor.handle_event(&event.into(), &mut cx),
         };
 
@@ -698,7 +712,13 @@ impl Application {
                         }
                     }
                     Notification::PublishDiagnostics(mut params) => {
-                        let path = params.uri.to_file_path().unwrap();
+                        let path = match params.uri.to_file_path() {
+                            Ok(path) => path,
+                            Err(_) => {
+                                log::error!("Unsupported file URI: {}", params.uri);
+                                return;
+                            }
+                        };
                         let doc = self.editor.document_by_path_mut(&path);
 
                         if let Some(doc) = doc {
@@ -1051,6 +1071,19 @@ impl Application {
         if self.config.load().editor.mouse {
             execute!(stdout, EnableMouseCapture)?;
         }
+        if matches!(terminal::supports_keyboard_enhancement(), Ok(true)) {
+            log::debug!("The enhanced keyboard protocol is supported on this terminal");
+            execute!(
+                stdout,
+                PushKeyboardEnhancementFlags(
+                    KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                        | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
+                )
+            )?;
+        } else {
+            log::debug!("The enhanced keyboard protocol is not supported on this terminal");
+        }
+
         Ok(())
     }
 
