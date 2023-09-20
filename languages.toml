@@ -24,6 +24,7 @@ dot-language-server = { command = "dot-language-server", args = ["--stdio"] }
 elixir-ls = { command = "elixir-ls", config = { elixirLS.dialyzerEnabled = false } }
 elm-language-server = { command = "elm-language-server" }
 elvish = { command = "elvish", args = ["-lsp"] }
+emmet-ls = { args = ["--stdio"], command = "emmet-ls" }
 erlang-ls = { command = "erlang_ls" }
 forc = { command = "forc", args = ["lsp"] }
 forth-lsp = { command = "forth-lsp" }
@@ -63,6 +64,7 @@ r = { command = "R", args = ["--no-echo", "-e", "languageserver::run()"] }
 racket = { command = "racket", args = ["-l", "racket-langserver"] }
 regols = { command = "regols" }
 rescript-language-server = { command = "rescript-language-server", args = ["--stdio"] }
+rhai = { command = "rhai", args = ["lsp", "stdio"] }
 robotframework_ls = { command = "robotframework_ls" }
 serve-d = { command = "serve-d" }
 slint-lsp = { command = "slint-lsp", args = [] }
@@ -644,7 +646,7 @@ scope = "text.html.basic"
 injection-regex = "html"
 file-types = ["html"]
 roots = []
-language-servers = [ "vscode-html-language-server" ]
+language-servers = [ "vscode-html-language-server", "emmet-ls" ]
 auto-format = true
 indent = { tab-width = 2, unit = "  " }
 
@@ -660,8 +662,7 @@ file-types = ["py","pyi","py3","pyw","ptl",".pythonstartup",".pythonrc","SConstr
 shebangs = ["python"]
 roots = ["pyproject.toml", "setup.py", "poetry.lock", "pyrightconfig.json"]
 comment-token = "#"
-language-servers = [ "pylsp" ]
-# TODO: pyls needs utf-8 offsets
+language-servers = [ "pyright" ]
 indent = { tab-width = 4, unit = "    " }
 
 [[grammar]]
@@ -1349,6 +1350,25 @@ roots = []
 [[grammar]]
 name = "regex"
 source = { git = "https://github.com/tree-sitter/tree-sitter-regex", rev = "e1cfca3c79896ff79842f057ea13e529b66af636" }
+
+[[language]]
+name = "rhai"
+scope = "source.rhai"
+injection-regex = "rhai"
+roots = []
+file-types = ["rhai"]
+auto-format = true
+comment-token = "//"
+language-servers = ["rhai"]
+indent = { tab-width = 4, unit = "\t" }
+grammar = "rust"
+
+[language.auto-pairs]
+'(' = ')'
+'{' = '}'
+'[' = ']'
+'"' = '"'
+'`' = '`'
 
 [[language]]
 name = "git-config"
