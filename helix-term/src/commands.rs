@@ -88,10 +88,24 @@ pub struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
+    /// Composes the current and given callbacks.
+    ///
+    /// If there is currently a callback, the existing callback will be executed first and
+    /// then the given callback.
+    pub fn compose_callback(&mut self, callback: crate::compositor::Callback) {
+        self.callback = match self.callback.take() {
+            Some(existing_callback) => Some(Box::new(|compositor, cx| {
+                existing_callback(compositor, cx);
+                callback(compositor, cx);
+            })),
+            None => Some(callback),
+        };
+    }
+
     /// Push a new component onto the compositor.
     pub fn push_layer(&mut self, component: Box<dyn Component>) {
-        self.callback = Some(Box::new(|compositor: &mut Compositor, _| {
-            compositor.push(component)
+        self.compose_callback(Box::new(|compositor, _| {
+            compositor.push(component);
         }));
     }
 
@@ -152,9 +166,13 @@ where
 
 use helix_view::{align_view, Align};
 
-/// A MappableCommand is either a static command like "jump_view_up" or a Typable command like
-/// :format. It causes a side-effect on the state (usually by creating and applying a transaction).
-/// Both of these types of commands can be mapped with keybindings in the config.toml.
+/// A command which can be mapped in configuration.
+///
+/// There are three kinds of MappableCommands:
+///
+/// * Static commands like "jump_view_up"
+/// * Typable commands like :format
+/// * Macro key-sequences
 #[derive(Clone)]
 pub enum MappableCommand {
     Typable {
@@ -166,6 +184,11 @@ pub enum MappableCommand {
         name: &'static str,
         fun: fn(cx: &mut Context),
         doc: &'static str,
+    },
+    Macro {
+        name: String,
+        sequence: Vec<KeyEvent>,
+        doc: String,
     },
 }
 
@@ -203,6 +226,14 @@ impl MappableCommand {
                 }
             }
             Self::Static { fun, .. } => (fun)(cx),
+            Self::Macro { sequence, .. } => {
+                let keys = sequence.clone();
+                cx.compose_callback(Box::new(move |compositor, cx| {
+                    for &key in keys.iter() {
+                        compositor.handle_event(&compositor::Event::Key(key), cx);
+                    }
+                }));
+            }
         }
     }
 
@@ -210,6 +241,7 @@ impl MappableCommand {
         match &self {
             Self::Typable { name, .. } => name,
             Self::Static { name, .. } => name,
+            Self::Macro { name, .. } => name,
         }
     }
 
@@ -217,6 +249,7 @@ impl MappableCommand {
         match &self {
             Self::Typable { doc, .. } => doc,
             Self::Static { doc, .. } => doc,
+            Self::Macro { doc, .. } => doc,
         }
     }
 
@@ -507,6 +540,12 @@ impl fmt::Debug for MappableCommand {
                 .field(name)
                 .field(args)
                 .finish(),
+            MappableCommand::Macro { name, doc, sequence } => f
+                .debug_tuple("MappableCommand")
+                .field(name)
+                .field(doc)
+                .field(sequence)
+                .finish(),
         }
     }
 }
@@ -537,6 +576,14 @@ impl std::str::FromStr for MappableCommand {
                     args,
                 })
                 .ok_or_else(|| anyhow!("No TypableCommand named '{}'", s))
+        } else if let Some(suffix) = s.strip_prefix('@') {
+            let text = suffix.to_string();
+
+            helix_view::input::parse_macro(suffix).map(|sequence| MappableCommand::Macro {
+                name: text.clone(),
+                doc: text,
+                sequence,
+            })
         } else {
             MappableCommand::STATIC_COMMAND_LIST
                 .iter()
@@ -580,6 +627,18 @@ impl PartialEq for MappableCommand {
                     name: second_name, ..
                 },
             ) => first_name == second_name,
+            (
+                MappableCommand::Macro {
+                    name: first_name,
+                    sequence: first_sequence,
+                    ..
+                },
+                MappableCommand::Macro {
+                    name: second_name,
+                    sequence: second_sequence,
+                    ..
+                },
+            ) => first_name == second_name && first_sequence == second_sequence,
             _ => false,
         }
     }
@@ -2906,6 +2965,9 @@ impl ui::menu::Item for MappableCommand {
                 Some(bindings) => format!("{} ({}) [{}]", doc, fmt_binding(bindings), name).into(),
                 None => format!("{} [{}]", doc, name).into(),
             },
+            MappableCommand::Macro { .. } => {
+                unreachable!("Macro keybindings should not show up in the command picker")
+            }
         }
     }
 }
@@ -2914,7 +2976,7 @@ pub fn command_palette(cx: &mut Context) {
     let register = cx.register;
     let count = cx.count;
 
-    cx.callback = Some(Box::new(
+    cx.compose_callback(Box::new(
         move |compositor: &mut Compositor, cx: &mut compositor::Context| {
             let keymap = compositor.find::<ui::EditorView>().unwrap().keymaps.map()
                 [&cx.editor.mode]
@@ -2962,7 +3024,7 @@ pub fn command_palette(cx: &mut Context) {
 
 fn last_picker(cx: &mut Context) {
     // TODO: last picker does not seem to work well with buffer_picker
-    cx.callback = Some(Box::new(|compositor, cx| {
+    cx.compose_callback(Box::new(|compositor, cx| {
         if let Some(picker) = compositor.last_picker.take() {
             compositor.push(picker);
         } else {
@@ -5771,7 +5833,7 @@ fn replay_macro(cx: &mut Context) {
     cx.editor.macro_replaying.push(reg);
 
     let count = cx.count();
-    cx.callback = Some(Box::new(move |compositor, cx| {
+    cx.compose_callback(Box::new(move |compositor, cx| {
         for _ in 0..count {
             for &key in keys.iter() {
                 compositor.handle_event(&compositor::Event::Key(key), cx);
