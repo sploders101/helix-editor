@@ -86,6 +86,7 @@ yaml-language-server = { command = "yaml-language-server", args = ["--stdio"] }
 zls = { command = "zls" }
 blueprint-compiler = { command = "blueprint-compiler", args = ["lsp"] }
 emmet-ls = { args = ["--stdio"], command = "emmet-ls" }
+rhai = { command = "rhai", args = ["lsp", "stdio"] }
 
 
 [language-server.lua-language-server]
