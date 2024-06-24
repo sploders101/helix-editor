@@ -684,7 +684,7 @@ file-types = ["py","pyi","py3","pyw","ptl",".pythonstartup",".pythonrc","SConstr
 shebangs = ["python"]
 roots = ["pyproject.toml", "setup.py", "poetry.lock", "pyrightconfig.json"]
 comment-token = "#"
-language-servers = [ "pylsp" ]
+language-servers = [ "pyright" ]
 # TODO: pyls needs utf-8 offsets
 indent = { tab-width = 4, unit = "    " }
 
