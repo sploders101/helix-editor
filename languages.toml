@@ -82,7 +82,6 @@ vscode-html-language-server = { command = "vscode-html-language-server", args = 
 vscode-json-language-server =  { command = "vscode-json-language-server", args = ["--stdio"], config = { provideFormatter = true } }
 vuels = { command = "vue-language-server", args = ["--stdio"], config = { typescript = { tsdk = "node_modules/typescript/lib/" } } }
 wgsl_analyzer = { command = "wgsl_analyzer" }
-yaml-language-server = { command = "yaml-language-server", args = ["--stdio"] }
 zls = { command = "zls" }
 blueprint-compiler = { command = "blueprint-compiler", args = ["lsp"] }
 emmet-ls = { args = ["--stdio"], command = "emmet-ls" }
@@ -99,6 +98,17 @@ setType = true
 paramName = "All"
 paramType = true
 await = true
+
+
+[language-server.yaml-language-server]
+command = "yaml-language-server"
+args = ["--stdio"]
+
+[language-server.yaml-language-server.config]
+schemastore = { enable = true }
+
+[language-server.yaml-language-server.config.yaml.schemas]
+kubernetes = ["*.k8s.yml", "*.k8s.yaml"]
 
 
 [language-server.gopls]
