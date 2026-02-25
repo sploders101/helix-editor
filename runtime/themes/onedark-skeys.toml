@@ -44,14 +44,14 @@
 "diagnostic.hint".underline = { color = "green", style = "curl" } 
 "diagnostic.warning".underline = { color = "yellow", style = "curl" } 
 "diagnostic.error".underline = { color = "red", style = "curl" } 
-"info" = { fg = "blue", modifiers = ["bold"] }
 "diagnostic.inlay.info" = { fg = "blue", underline = { style = "dotted" }, modifiers = ["bold", "dim"] }
-"hint" = { fg = "green", modifiers = ["bold"] }
 "diagnostic.inlay.hint" = { fg = "green", underline = { style = "dotted" }, modifiers = ["bold", "dim"] }
-"warning" = { fg = "yellow", modifiers = ["bold"] }
 "diagnostic.inlay.warning" = { fg = "yellow", underline = { style = "dotted" }, modifiers = ["bold", "dim"] }
-"error" = { fg = "red", modifiers = ["bold"] }
 "diagnostic.inlay.error" = { fg = "red", underline = { style = "dotted" }, modifiers = ["bold", "dim"] }
+"info" = { fg = "blue", modifiers = ["bold"] }
+"hint" = { fg = "green", modifiers = ["bold"] }
+"warning" = { fg = "yellow", modifiers = ["bold"] }
+"error" = { fg = "red", modifiers = ["bold"] }
 
 "ui.background" = { bg = "black" }
 "ui.virtual" = { fg = "faint-gray" }
