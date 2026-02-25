@@ -27,10 +27,10 @@ struct Styles {
 impl Styles {
     fn new(theme: &Theme) -> Styles {
         Styles {
-            hint: theme.try_get("diagnostic.inline.hint").unwrap_or(theme.get("hint")),
-            info: theme.try_get("diagnostic.inline.info").unwrap_or(theme.get("info")),
-            warning: theme.try_get("diagnostic.inline.warning").unwrap_or(theme.get("warning")),
-            error: theme.try_get("diagnostic.inline.error").unwrap_or(theme.get("error")),
+            hint: theme.try_get("diagnostic.inlay.hint").unwrap_or(theme.get("hint")),
+            info: theme.try_get("diagnostic.inlay.info").unwrap_or(theme.get("info")),
+            warning: theme.try_get("diagnostic.inlay.warning").unwrap_or(theme.get("warning")),
+            error: theme.try_get("diagnostic.inlay.error").unwrap_or(theme.get("error")),
         }
     }
 
