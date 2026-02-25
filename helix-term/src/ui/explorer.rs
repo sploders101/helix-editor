@@ -426,7 +426,7 @@ impl Explorer {
         let background = cx.editor.theme.get("ui.background");
         surface.clear_with(side_area, background);
 
-        let prompt_area = area.clip_top(side_area.height);
+        let prompt_area = surface.area.clip_top(side_area.height);
 
         let list_area = match config.explorer.position {
             ExplorerPosition::Left => {
@@ -472,8 +472,8 @@ impl Explorer {
 
         if self.is_focus() && self.show_help {
             let help_area = match config.explorer.position {
-                ExplorerPosition::Left => area,
-                ExplorerPosition::Right => area.clip_right(list_area.width.saturating_add(2)),
+                ExplorerPosition::Left => surface.area,
+                ExplorerPosition::Right => surface.area.clip_right(list_area.width.saturating_add(2)),
             };
             self.render_help(help_area, surface, cx);
         }
