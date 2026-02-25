@@ -9,6 +9,7 @@ use helix_view::annotations::diagnostics::{
     DiagnosticFilter, InlineDiagnosticAccumulator, InlineDiagnosticsConfig,
 };
 
+use helix_view::graphics::UnderlineStyle;
 use helix_view::theme::Style;
 use helix_view::{Document, Theme};
 
@@ -26,20 +27,25 @@ struct Styles {
 impl Styles {
     fn new(theme: &Theme) -> Styles {
         Styles {
-            hint: theme.get("hint"),
-            info: theme.get("info"),
-            warning: theme.get("warning"),
-            error: theme.get("error"),
+            hint: theme.try_get("diagnostic.inline.hint").unwrap_or(theme.get("hint")),
+            info: theme.try_get("diagnostic.inline.info").unwrap_or(theme.get("info")),
+            warning: theme.try_get("diagnostic.inline.warning").unwrap_or(theme.get("warning")),
+            error: theme.try_get("diagnostic.inline.error").unwrap_or(theme.get("error")),
         }
     }
 
-    fn severity_style(&self, severity: Severity) -> Style {
-        match severity {
+    fn severity_style(&self, severity: Severity, structural: bool) -> Style {
+        let mut style = match severity {
             Severity::Hint => self.hint,
             Severity::Info => self.info,
             Severity::Warning => self.warning,
             Severity::Error => self.error,
+        };
+        // Structural components shouldn't have underlines (ex. vertical bar)
+        if structural {
+            style = style.underline_style(UnderlineStyle::Reset);
         }
+        return style;
     }
 }
 
@@ -88,21 +94,21 @@ struct Renderer<'a, 'b> {
 }
 
 impl Renderer<'_, '_> {
-    fn draw_decoration(&mut self, g: &'static str, severity: Severity, col: u16) {
-        self.draw_decoration_at(g, severity, col, self.row)
+    fn draw_decoration(&mut self, g: &'static str, severity: Severity, col: u16, structural: bool) {
+        self.draw_decoration_at(g, severity, col, self.row, structural)
     }
 
-    fn draw_decoration_at(&mut self, g: &'static str, severity: Severity, col: u16, row: u16) {
+    fn draw_decoration_at(&mut self, g: &'static str, severity: Severity, col: u16, row: u16, structural: bool) {
         self.renderer.draw_decoration_grapheme(
             Grapheme::new_decoration(g),
-            self.styles.severity_style(severity),
+            self.styles.severity_style(severity, structural),
             row,
             col,
         );
     }
 
     fn draw_eol_diagnostic(&mut self, diag: &Diagnostic, row: u16, col: usize) -> u16 {
-        let style = self.styles.severity_style(diag.severity());
+        let style = self.styles.severity_style(diag.severity(), false);
         let width = self.renderer.viewport.width;
         let start_col = (col - self.renderer.offset.col) as u16;
         let mut end_col = start_col;
@@ -136,9 +142,9 @@ impl Renderer<'_, '_> {
         } else {
             (BR_CORNER, severity)
         };
-        self.draw_decoration(sym, sym_severity, col);
+        self.draw_decoration(sym, sym_severity, col, true);
         for i in 0..self.config.prefix_len {
-            self.draw_decoration(HOR_BAR, severity, col + i + 1);
+            self.draw_decoration(HOR_BAR, severity, col + i + 1, true);
         }
 
         let text_col = col + self.config.prefix_len + 1;
@@ -151,7 +157,7 @@ impl Renderer<'_, '_> {
             0,
         );
         let mut last_row = 0;
-        let style = self.styles.severity_style(severity);
+        let style = self.styles.severity_style(severity, false);
         for grapheme in formatter {
             last_row = grapheme.visual_pos.row;
             self.renderer.draw_decoration_grapheme(
@@ -166,7 +172,7 @@ impl Renderer<'_, '_> {
         let extra_lines = last_row;
         if let Some(next_severity) = next_severity {
             for _ in 0..extra_lines {
-                self.draw_decoration(VER_BAR, next_severity, col);
+                self.draw_decoration(VER_BAR, next_severity, col, true);
                 self.row += 1;
             }
         } else {
@@ -187,7 +193,7 @@ impl Renderer<'_, '_> {
         }
         let mut severity = last_diag.severity();
         let mut last_anchor = last_anchor;
-        self.draw_decoration(BL_CORNER, severity, last_anchor);
+        self.draw_decoration(BL_CORNER, severity, last_anchor, true);
         let mut stacked_diagnostics = 1;
         for &(diag, anchor) in stack.iter().rev().skip(1) {
             let sym = match anchor.cmp(&start) {
@@ -202,9 +208,9 @@ impl Renderer<'_, '_> {
                 continue;
             }
             for col in (anchor + 1)..last_anchor {
-                self.draw_decoration(HOR_BAR, old_severity, col)
+                self.draw_decoration(HOR_BAR, old_severity, col, true)
             }
-            self.draw_decoration(sym, severity, anchor);
+            self.draw_decoration(sym, severity, anchor, true);
             last_anchor = anchor;
         }
 
@@ -213,9 +219,9 @@ impl Renderer<'_, '_> {
         // of the line is not missing
         if last_anchor != start {
             for col in (start + 1)..last_anchor {
-                self.draw_decoration(HOR_BAR, severity, col)
+                self.draw_decoration(HOR_BAR, severity, col, true)
             }
-            self.draw_decoration(TR_CORNER, severity, start)
+            self.draw_decoration(TR_CORNER, severity, start, true)
         }
         self.row += 1;
         let stacked_diagnostics = &stack[stack.len() - stacked_diagnostics..];
@@ -237,7 +243,7 @@ impl Renderer<'_, '_> {
         while let Some((diag, anchor)) = stack.next() {
             if anchor != last_anchor {
                 for row in self.first_row..self.row {
-                    self.draw_decoration_at(VER_BAR, diag.severity(), anchor, row);
+                    self.draw_decoration_at(VER_BAR, diag.severity(), anchor, row, true);
                 }
             }
             let next_severity = stack.peek().and_then(|&(diag, next_anchor)| {
