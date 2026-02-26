@@ -117,7 +117,11 @@ pub fn runtime_file(rel_path: impl AsRef<Path>) -> PathBuf {
 }
 
 pub fn config_dir() -> PathBuf {
-    // TODO: allow env var override
+    if let Ok(environment_override) = std::env::var("HELIX_CONFIG_DIR") {
+        if environment_override != "" {
+            return PathBuf::from(environment_override);
+        }
+    }
     let strategy = choose_base_strategy().expect("Unable to find the config directory!");
     let mut path = strategy.config_dir();
     path.push("helix");
