@@ -157,6 +157,7 @@ where
         helix_view::editor::StatusLineElement::VersionControl => render_version_control,
         helix_view::editor::StatusLineElement::Register => render_register,
         helix_view::editor::StatusLineElement::CurrentWorkingDirectory => render_cwd,
+        helix_view::editor::StatusLineElement::InlayDiagnostics => render_inlay_diagnostics,
     }
 }
 
@@ -582,4 +583,21 @@ where
         .to_string_lossy()
         .to_string();
     write(context, cwd.into())
+}
+
+fn render_inlay_diagnostics<'a, F>(context: &mut RenderContext<'a>, write: F)
+where
+    F: Fn(&mut RenderContext<'a>, Span<'a>) + Copy,
+{
+    let inlay_diagnostics = context.doc.inlay_diagnostics_requested;
+    let config = context.editor.config();
+    if inlay_diagnostics {
+        write(
+            context,
+            Span::styled(
+                config.inline_diagnostics.statusline_indicator.clone(),
+                context.editor.theme.get("error"),
+            ),
+        );
+    }
 }

@@ -620,6 +620,7 @@ impl Default for StatusLineConfig {
             ],
             center: vec![],
             right: vec![
+                E::InlayDiagnostics,
                 E::Diagnostics,
                 E::Selections,
                 E::Register,
@@ -723,6 +724,9 @@ pub enum StatusLineElement {
 
     /// The base of current working directory
     CurrentWorkingDirectory,
+
+    /// Indicator for inlay diagnostics
+    InlayDiagnostics,
 }
 
 // Cursor shape is read and used on every rendered frame and so needs
