@@ -595,7 +595,7 @@ where
         write(
             context,
             Span::styled(
-                config.inline_diagnostics.statusline_indicator.clone(),
+                format!(" {} ", config.inline_diagnostics.statusline_indicator),
                 context.editor.theme.get("error"),
             ),
         );
