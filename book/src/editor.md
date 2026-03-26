@@ -480,6 +480,15 @@ tab = "extend_parent_node_end"
 S-tab = "extend_parent_node_start"
 ```
 
+### `[editor.explorer]` Section
+
+Sets explorer side width and style.
+
+| Key            | Description                                 | Default |
+| -------------- | ------------------------------------------- | ------- |
+| `column-width` | explorer side width                         | 30      |
+| `position`     | explorer widget position, `left` or `right` | `left`  |
+
 ### `[editor.inline-diagnostics]` Section
 
 Options for rendering diagnostics inside the text like shown below

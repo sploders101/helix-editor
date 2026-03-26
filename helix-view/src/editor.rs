@@ -388,6 +388,8 @@ pub struct Config {
     pub indent_guides: IndentGuidesConfig,
     /// Whether to color modes with different colors. Defaults to `false`.
     pub color_modes: bool,
+    /// Explorer Config
+    pub explorer: crate::explorer::ExplorerConfig,
     pub soft_wrap: SoftWrap,
     /// Workspace specific lsp ceiling dirs
     pub workspace_lsp_roots: Vec<PathBuf>,
@@ -1129,6 +1131,7 @@ impl Default for Config {
             bufferline: BufferLine::default(),
             indent_guides: IndentGuidesConfig::default(),
             color_modes: false,
+            explorer: crate::explorer::ExplorerConfig::default(),
             soft_wrap: SoftWrap {
                 enable: Some(false),
                 ..SoftWrap::default()
