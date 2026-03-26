@@ -56,9 +56,15 @@ impl<'a> InlineDiagnostics<'a> {
         cursor: usize,
         config: InlineDiagnosticsConfig,
         eol_diagnostics: DiagnosticFilter,
+        inlay_diagnostics_requested: bool,
     ) -> Self {
         InlineDiagnostics {
-            state: InlineDiagnosticAccumulator::new(cursor, doc, config),
+            state: InlineDiagnosticAccumulator::new(
+                cursor,
+                doc,
+                config,
+                inlay_diagnostics_requested,
+            ),
             styles: Styles::new(theme),
             eol_diagnostics,
         }

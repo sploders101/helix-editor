@@ -498,7 +498,11 @@ impl View {
         let enable_cursor_line = self
             .diagnostics_handler
             .show_cursorline_diagnostics(doc, self.id);
-        let config = config.inline_diagnostics.prepare(width, enable_cursor_line);
+        let config = config.inline_diagnostics.prepare(
+            width,
+            enable_cursor_line,
+            doc.inlay_diagnostics_requested,
+        );
         if !config.disabled() {
             let cursor = doc
                 .selection(self.id)
@@ -510,6 +514,7 @@ impl View {
                 width,
                 doc.view_offset(self.id).horizontal_offset,
                 config,
+                doc.inlay_diagnostics_requested,
             ));
         }
 

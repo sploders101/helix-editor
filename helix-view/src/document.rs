@@ -225,6 +225,8 @@ pub struct Document {
     // of storing a copy on every doc. Then we can remove the surrounding `Arc` and use the
     // `ArcSwap` directly.
     syn_loader: Arc<ArcSwap<syntax::Loader>>,
+
+    pub inlay_diagnostics_requested: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -760,6 +762,7 @@ impl Document {
             previous_diagnostic_id: None,
             pull_diagnostic_controller: TaskController::new(),
             document_link_controller: TaskController::new(),
+            inlay_diagnostics_requested: false,
         }
     }
 

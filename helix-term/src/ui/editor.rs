@@ -199,13 +199,18 @@ impl EditorView {
         let enable_cursor_line = view
             .diagnostics_handler
             .show_cursorline_diagnostics(doc, view.id);
-        let inline_diagnostic_config = config.inline_diagnostics.prepare(width, enable_cursor_line);
+        let inline_diagnostic_config = config.inline_diagnostics.prepare(
+            width,
+            enable_cursor_line,
+            doc.inlay_diagnostics_requested,
+        );
         decorations.add_decoration(InlineDiagnostics::new(
             doc,
             theme,
             primary_cursor,
             inline_diagnostic_config,
             config.end_of_line_diagnostics,
+            doc.inlay_diagnostics_requested,
         ));
         render_document(
             surface,
@@ -1625,7 +1630,10 @@ impl Component for EditorView {
         const MIN_EDITOR_WIDTH: u16 = 10;
         if let Some(ref mut explorer) = self.explorer {
             let explorer_column_width = if explorer.is_opened() {
-                explorer.column_width(cx).saturating_add(2).min(editor_area.width.saturating_sub(MIN_EDITOR_WIDTH))
+                explorer
+                    .column_width(cx)
+                    .saturating_add(2)
+                    .min(editor_area.width.saturating_sub(MIN_EDITOR_WIDTH))
             } else {
                 0
             };

@@ -517,6 +517,7 @@ impl MappableCommand {
         remove_primary_selection, "Remove primary selection",
         completion, "Invoke completion popup",
         hover, "Show docs for item under cursor",
+        toggle_inlay_diagnostics, "Toggle inlay diagnostics",
         toggle_comments, "Comment/uncomment selections",
         toggle_line_comments, "Line comment/uncomment selections",
         toggle_block_comments, "Block comment/uncomment selections",
@@ -5372,6 +5373,13 @@ pub fn completion(cx: &mut Context) {
     cx.editor
         .handlers
         .trigger_completions(cursor, doc.id(), view.id);
+}
+
+pub fn toggle_inlay_diagnostics(cx: &mut Context) {
+    let doc_id = view!(cx.editor).doc;
+    if let Some(document) = cx.editor.document_mut(doc_id) {
+        document.inlay_diagnostics_requested = !document.inlay_diagnostics_requested;
+    }
 }
 
 // comments

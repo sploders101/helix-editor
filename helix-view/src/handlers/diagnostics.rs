@@ -108,6 +108,10 @@ impl DiagnosticsHandler {
         if !self.active {
             return false;
         }
+        if doc.inlay_diagnostics_requested {
+            self.immediately_show_diagnostic(doc, view);
+            return true;
+        }
         let cursor_line = doc
             .selection(view)
             .primary()

@@ -71,11 +71,19 @@ impl InlineDiagnosticsConfig {
         )
     }
 
-    pub fn prepare(&self, width: u16, enable_cursor_line: bool) -> Self {
+    pub fn prepare(
+        &self,
+        width: u16,
+        enable_cursor_line: bool,
+        inlay_hints_requested: bool,
+    ) -> Self {
         let mut config = self.clone();
         if width < self.min_diagnostic_width + self.prefix_len {
             config.cursor_line = DiagnosticFilter::Disable;
             config.other_lines = DiagnosticFilter::Disable;
+        } else if inlay_hints_requested {
+            config.cursor_line = DiagnosticFilter::Enable(Severity::Hint);
+            config.cursor_line = DiagnosticFilter::Enable(Severity::Hint);
         } else if !enable_cursor_line {
             config.cursor_line = self.cursor_line.min(self.other_lines);
         }
@@ -126,10 +134,16 @@ pub struct InlineDiagnosticAccumulator<'a> {
     pub config: InlineDiagnosticsConfig,
     cursor: usize,
     cursor_line: bool,
+    inlay_diagnostics_requested: bool,
 }
 
 impl<'a> InlineDiagnosticAccumulator<'a> {
-    pub fn new(cursor: usize, doc: &'a Document, config: InlineDiagnosticsConfig) -> Self {
+    pub fn new(
+        cursor: usize,
+        doc: &'a Document,
+        config: InlineDiagnosticsConfig,
+        inlay_diagnostics_requested: bool,
+    ) -> Self {
         InlineDiagnosticAccumulator {
             idx: 0,
             doc,
@@ -137,6 +151,7 @@ impl<'a> InlineDiagnosticAccumulator<'a> {
             config,
             cursor,
             cursor_line: false,
+            inlay_diagnostics_requested,
         }
     }
 
@@ -225,7 +240,9 @@ impl<'a> InlineDiagnosticAccumulator<'a> {
     }
 
     pub fn filter(&self) -> DiagnosticFilter {
-        if self.cursor_line {
+        if self.inlay_diagnostics_requested {
+            DiagnosticFilter::Enable(Severity::Hint)
+        } else if self.cursor_line {
             self.config.cursor_line
         } else {
             self.config.other_lines
@@ -233,7 +250,9 @@ impl<'a> InlineDiagnosticAccumulator<'a> {
     }
 
     pub fn compute_line_diagnostics(&mut self) {
-        let filter = if self.cursor_line {
+        let filter = if self.inlay_diagnostics_requested {
+            DiagnosticFilter::Enable(Severity::Hint)
+        } else if self.cursor_line {
             self.cursor_line = false;
             self.config.cursor_line
         } else {
@@ -268,9 +287,15 @@ impl<'a> InlineDiagnostics<'a> {
         width: u16,
         horizontal_off: usize,
         config: InlineDiagnosticsConfig,
+        inlay_diagnostics_requested: bool,
     ) -> Box<dyn LineAnnotation + 'a> {
         Box::new(InlineDiagnostics {
-            state: InlineDiagnosticAccumulator::new(cursor, doc, config),
+            state: InlineDiagnosticAccumulator::new(
+                cursor,
+                doc,
+                config,
+                inlay_diagnostics_requested,
+            ),
             width,
             horizontal_off,
         })

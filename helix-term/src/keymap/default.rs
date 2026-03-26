@@ -232,6 +232,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "s" => lsp_or_syntax_symbol_picker,
             "S" => lsp_or_syntax_workspace_symbol_picker,
             "d" => diagnostics_picker,
+            "C-d" => toggle_inlay_diagnostics,
             "D" => workspace_diagnostics_picker,
             "g" => changed_file_picker,
             "a" => code_action,
