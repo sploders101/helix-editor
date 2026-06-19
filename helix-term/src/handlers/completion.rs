@@ -93,7 +93,7 @@ fn show_completion(
     // Completions are completed asynchronously and therefore the user could
     //switch document/view or leave insert mode. In all of thoise cases the
     // completion should be discarded
-    if editor.mode != Mode::Insert || view.id != trigger.view || doc.id() != trigger.doc {
+    if editor.mode() != Mode::Insert || view.id != trigger.view || doc.id() != trigger.doc {
         return;
     }
 
@@ -200,7 +200,7 @@ fn clear_completions(cx: &mut commands::Context) {
 fn completion_post_command_hook(
     PostCommand { command, cx }: &mut PostCommand<'_, '_>,
 ) -> anyhow::Result<()> {
-    if cx.editor.mode == Mode::Insert {
+    if cx.editor.mode() == Mode::Insert {
         if cx.editor.last_completion.is_some() {
             match command {
                 MappableCommand::Static {

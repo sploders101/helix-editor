@@ -836,11 +836,12 @@ fn goto_line_end_impl(view: &mut View, doc: &mut Document, movement: Movement) {
 }
 
 fn goto_line_end(cx: &mut Context) {
+    let editor_mode = cx.editor.mode();
     let (view, doc) = current!(cx.editor);
     goto_line_end_impl(
         view,
         doc,
-        if cx.editor.mode == Mode::Select {
+        if editor_mode == Mode::Select {
             Movement::Extend
         } else {
             Movement::Move
@@ -866,11 +867,12 @@ fn goto_line_end_newline_impl(view: &mut View, doc: &mut Document, movement: Mov
 }
 
 fn goto_line_end_newline(cx: &mut Context) {
+    let editor_mode = cx.editor.mode();
     let (view, doc) = current!(cx.editor);
     goto_line_end_newline_impl(
         view,
         doc,
-        if cx.editor.mode == Mode::Select {
+        if editor_mode == Mode::Select {
             Movement::Extend
         } else {
             Movement::Move
@@ -897,11 +899,12 @@ fn goto_line_start_impl(view: &mut View, doc: &mut Document, movement: Movement)
 }
 
 fn goto_line_start(cx: &mut Context) {
+    let editor_mode = cx.editor.mode();
     let (view, doc) = current!(cx.editor);
     goto_line_start_impl(
         view,
         doc,
-        if cx.editor.mode == Mode::Select {
+        if editor_mode == Mode::Select {
             Movement::Extend
         } else {
             Movement::Move
@@ -995,12 +998,13 @@ fn kill_to_line_end(cx: &mut Context) {
 }
 
 fn goto_first_nonwhitespace(cx: &mut Context) {
+    let editor_mode = cx.editor.mode();
     let (view, doc) = current!(cx.editor);
 
     goto_first_nonwhitespace_impl(
         view,
         doc,
-        if cx.editor.mode == Mode::Select {
+        if editor_mode == Mode::Select {
             Movement::Extend
         } else {
             Movement::Move
@@ -1133,6 +1137,7 @@ fn align_selections(cx: &mut Context) {
 fn goto_window(cx: &mut Context, align: Align) {
     let count = cx.count() - 1;
     let config = cx.editor.config();
+    let editor_mode = cx.editor.mode();
     let (view, doc) = current!(cx.editor);
     let view_offset = doc.view_offset(view.id);
 
@@ -1165,7 +1170,7 @@ fn goto_window(cx: &mut Context, align: Align) {
     let selection = doc
         .selection(view.id)
         .clone()
-        .transform(|range| range.put_cursor(text, pos, cx.editor.mode == Mode::Select));
+        .transform(|range| range.put_cursor(text, pos, editor_mode == Mode::Select));
     doc.set_selection(view.id, selection);
 }
 
@@ -1250,9 +1255,10 @@ where
 {
     let count = cx.count();
     let motion = move |editor: &mut Editor| {
+        let editor_mode = editor.mode();
         let (view, doc) = current!(editor);
         let text = doc.text().slice(..);
-        let behavior = if editor.mode == Mode::Select {
+        let behavior = if editor_mode == Mode::Select {
             Movement::Extend
         } else {
             Movement::Move
@@ -1848,6 +1854,7 @@ fn switch_to_lowercase(cx: &mut Context) {
 pub fn scroll(cx: &mut Context, offset: usize, direction: Direction, sync_cursor: bool) {
     use Direction::*;
     let config = cx.editor.config();
+    let editor_mode = cx.editor.mode();
     let (view, doc) = current!(cx.editor);
     let mut view_offset = doc.view_offset(view.id);
 
@@ -1881,7 +1888,7 @@ pub fn scroll(cx: &mut Context, offset: usize, direction: Direction, sync_cursor
     let mut annotations = view.text_annotations(&*doc, None);
 
     if sync_cursor {
-        let movement = match cx.editor.mode {
+        let movement = match editor_mode {
             Mode::Select => Movement::Extend,
             _ => Movement::Move,
         };
@@ -1940,7 +1947,7 @@ pub fn scroll(cx: &mut Context, offset: usize, direction: Direction, sync_cursor
         }
     }
 
-    let anchor = if cx.editor.mode == Mode::Select {
+    let anchor = if editor_mode == Mode::Select {
         range.anchor
     } else {
         head
@@ -3049,7 +3056,7 @@ fn ensure_selections_forward(cx: &mut Context) {
 }
 
 fn enter_insert_mode(cx: &mut Context) {
-    cx.editor.mode = Mode::Insert;
+    cx.editor.set_mode(Mode::Insert);
 }
 
 // inserts at the start of each selection
@@ -3519,7 +3526,7 @@ pub fn command_palette(cx: &mut Context) {
     cx.callback.push(Box::new(
         move |compositor: &mut Compositor, cx: &mut compositor::Context| {
             let keymap = compositor.find::<ui::EditorView>().unwrap().keymaps.map()
-                [&cx.editor.mode]
+                [&cx.editor.mode()]
                 .reverse_map();
 
             let commands = MappableCommand::STATIC_COMMAND_LIST.iter().cloned().chain(
@@ -3628,6 +3635,7 @@ fn insert_at_line_end(cx: &mut Context) {
 fn insert_with_indent(cx: &mut Context, cursor_fallback: IndentFallbackPos) {
     enter_insert_mode(cx);
 
+    let editor_mode = cx.editor.mode();
     let (view, doc) = current!(cx.editor);
     let loader = cx.editor.syn_loader.load();
 
@@ -3679,7 +3687,7 @@ fn insert_with_indent(cx: &mut Context, cursor_fallback: IndentFallbackPos) {
                 IndentFallbackPos::LineEnd => line_end_char_index(&text, cursor_line),
             };
 
-            ranges.push(range.put_cursor(text, pos + offs, cx.editor.mode == Mode::Select));
+            ranges.push(range.put_cursor(text, pos + offs, editor_mode == Mode::Select));
 
             (cursor_line_start, cursor_line_start, None)
         }
@@ -3994,6 +4002,7 @@ fn goto_last_accessed_file(cx: &mut Context) {
 }
 
 fn goto_last_modification(cx: &mut Context) {
+    let editor_mode = cx.editor.mode();
     let (view, doc) = current!(cx.editor);
     let pos = doc.history.get_mut().last_edit_pos();
     let text = doc.text().slice(..);
@@ -4001,7 +4010,7 @@ fn goto_last_modification(cx: &mut Context) {
         let selection = doc
             .selection(view.id)
             .clone()
-            .transform(|range| range.put_cursor(text, pos, cx.editor.mode == Mode::Select));
+            .transform(|range| range.put_cursor(text, pos, editor_mode == Mode::Select));
         push_jump(view, doc);
         doc.set_selection(view.id, selection);
     }
@@ -4039,12 +4048,12 @@ fn select_mode(cx: &mut Context) {
     });
     doc.set_selection(view.id, selection);
 
-    cx.editor.mode = Mode::Select;
+    cx.editor.set_mode(Mode::Select);
 }
 
 fn exit_select_mode(cx: &mut Context) {
-    if cx.editor.mode == Mode::Select {
-        cx.editor.mode = Mode::Normal;
+    if cx.editor.mode() == Mode::Select {
+        cx.editor.set_mode(Mode::Normal);
     }
 }
 
@@ -4168,6 +4177,7 @@ fn goto_prev_change(cx: &mut Context) {
 fn goto_next_change_impl(cx: &mut Context, direction: Direction) {
     let count = cx.count() as u32 - 1;
     let motion = move |editor: &mut Editor| {
+        let editor_mode = editor.mode();
         let (view, doc) = current!(editor);
         let doc_text = doc.text().slice(..);
         let diff_handle = if let Some(diff_handle) = doc.diff_handle() {
@@ -4194,7 +4204,7 @@ fn goto_next_change_impl(cx: &mut Context, direction: Direction) {
             };
             let hunk = diff.nth_hunk(hunk_idx);
             let new_range = hunk_range(hunk, doc_text);
-            if editor.mode == Mode::Select {
+            if editor_mode == Mode::Select {
                 let head = if new_range.head < range.anchor {
                     new_range.anchor
                 } else {
@@ -4337,13 +4347,13 @@ pub mod insert {
 
     pub fn append_char_interactive(cx: &mut Context) {
         // Save the current mode, so we can restore it later.
-        let mode = cx.editor.mode;
+        let mode = cx.editor.mode();
         append_mode(cx);
         insert_selection_interactive(cx, mode);
     }
 
     pub fn insert_char_interactive(cx: &mut Context) {
-        let mode = cx.editor.mode;
+        let mode = cx.editor.mode();
         insert_mode(cx);
         insert_selection_interactive(cx, mode);
     }
@@ -4374,7 +4384,7 @@ pub mod insert {
                 _ => (),
             };
             // Restore the old mode.
-            cx.editor.mode = old_mode;
+            cx.editor.set_mode(old_mode);
         });
     }
 
@@ -4906,12 +4916,13 @@ fn paste_impl(
 
 pub(crate) fn paste_bracketed_value(cx: &mut Context, contents: String) {
     let count = cx.count();
-    let paste = match cx.editor.mode {
+    let paste = match cx.editor.mode() {
         Mode::Insert | Mode::Select => Paste::Cursor,
         Mode::Normal => Paste::Before,
     };
+    let editor_mode = cx.editor.mode();
     let (view, doc) = current!(cx.editor);
-    paste_impl(&[contents], doc, view, paste, count, cx.editor.mode);
+    paste_impl(&[contents], doc, view, paste, count, editor_mode);
     exit_select_mode(cx);
 }
 
@@ -5003,8 +5014,9 @@ pub(crate) fn paste(editor: &mut Editor, register: char, pos: Paste, count: usiz
     };
     let values: Vec<_> = values.map(|value| value.to_string()).collect();
 
+    let editor_mode = editor.mode();
     let (view, doc) = current!(editor);
-    paste_impl(&values, doc, view, pos, count, editor.mode);
+    paste_impl(&values, doc, view, pos, count, editor_mode);
 }
 
 fn paste_after(cx: &mut Context) {
@@ -5748,8 +5760,9 @@ fn select_all_children(cx: &mut Context) {
 }
 
 fn match_brackets(cx: &mut Context) {
+    let editor_mode = cx.editor.mode();
     let (view, doc) = current!(cx.editor);
-    let is_select = cx.editor.mode == Mode::Select;
+    let is_select = editor_mode == Mode::Select;
     let text = doc.text();
     let text_slice = text.slice(..);
 
@@ -6015,6 +6028,7 @@ fn scroll_down(cx: &mut Context) {
 fn goto_ts_object_impl(cx: &mut Context, object: &'static str, direction: Direction) {
     let count = cx.count();
     let motion = move |editor: &mut Editor| {
+        let editor_mode = editor.mode();
         let (view, doc) = current!(editor);
         let loader = editor.syn_loader.load();
         if let Some(syntax) = doc.syntax() {
@@ -6026,7 +6040,7 @@ fn goto_ts_object_impl(cx: &mut Context, object: &'static str, direction: Direct
                     text, range, object, direction, &root, syntax, &loader, count,
                 );
 
-                if editor.mode == Mode::Select {
+                if editor_mode == Mode::Select {
                     let head = if new_range.head < range.anchor {
                         new_range.anchor
                     } else {

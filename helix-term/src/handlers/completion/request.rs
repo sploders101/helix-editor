@@ -171,7 +171,7 @@ fn request_completions(
         .unwrap()
         .completion
         .is_some()
-        || editor.mode != Mode::Insert
+        || editor.mode() != Mode::Insert
     {
         return;
     }

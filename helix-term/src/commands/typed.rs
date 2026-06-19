@@ -2108,7 +2108,7 @@ fn update_goto_line_number_preview(cx: &mut compositor::Context, args: Args) -> 
     goto_line_without_jumplist(
         cx.editor,
         NonZeroUsize::new(line),
-        if cx.editor.mode == Mode::Select {
+        if cx.editor.mode() == Mode::Select {
             Movement::Extend
         } else {
             Movement::Move

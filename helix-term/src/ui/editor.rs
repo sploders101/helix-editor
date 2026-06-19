@@ -1183,7 +1183,7 @@ impl EditorView {
         if let Some((on_next_key, _)) = self.on_next_key.take() {
             on_next_key(cxt, null_key_event);
         }
-        self.handle_keymap_event(cxt.editor.mode, cxt, null_key_event);
+        self.handle_keymap_event(cxt.editor.mode(), cxt, null_key_event);
         self.pseudo_pending.clear();
     }
 
@@ -1231,13 +1231,14 @@ impl EditorView {
                 if let Some((pos, view_id)) = pos_and_view(editor, row, column, true) {
                     editor.focus(view_id);
 
+                    let editor_mode = editor.mode();
                     let prev_view_id = view!(editor).id;
                     let doc = doc_mut!(editor, &view!(editor, view_id).doc);
 
                     if modifiers == KeyModifiers::ALT {
                         let selection = doc.selection(view_id).clone();
                         doc.set_selection(view_id, selection.push(Range::point(pos)));
-                    } else if editor.mode == Mode::Select {
+                    } else if editor_mode == Mode::Select {
                         // Discards non-primary selections for consistent UX with normal mode
                         let primary = doc.selection(view_id).primary().put_cursor(
                             doc.text().slice(..),

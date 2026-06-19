@@ -183,7 +183,7 @@ pub fn show_signature_help(
     // annoyance, see https://github.com/helix-editor/helix/issues/3112
     // For the most part this should not be needed as the request gets canceled automatically now
     // but it's technically possible for the mode change to just preempt this callback so better safe than sorry
-    if invoked == SignatureHelpInvoked::Automatic && editor.mode != Mode::Insert {
+    if invoked == SignatureHelpInvoked::Automatic && editor.mode() != Mode::Insert {
         return;
     }
 

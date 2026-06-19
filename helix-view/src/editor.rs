@@ -433,6 +433,23 @@ pub struct Config {
     /// Whether to enable Kitty Keyboard Protocol
     pub kitty_keyboard_protocol: KittyKeyboardProtocolConfig,
     pub buffer_picker: BufferPickerConfig,
+
+    /// Whether to enable management of the IME
+    pub ime_management: ImeManagementConfig,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct ImeManagementConfig {
+    enabled: bool,
+    ime_type: ImeManagementConfigType,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ImeManagementConfigType {
+    #[default]
+    Fcitx5,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, Clone, Copy)]
@@ -1160,6 +1177,10 @@ impl Default for Config {
             rainbow_brackets: false,
             kitty_keyboard_protocol: Default::default(),
             buffer_picker: BufferPickerConfig::default(),
+            ime_management: ImeManagementConfig {
+                enabled: false,
+                ime_type: ImeManagementConfigType::Fcitx5,
+            },
         }
     }
 }
@@ -1192,7 +1213,7 @@ type Diagnostics = BTreeMap<Uri, Vec<(lsp::Diagnostic, DiagnosticProvider)>>;
 
 pub struct Editor {
     /// Current editing mode.
-    pub mode: Mode,
+    mode: Mode,
     pub tree: Tree,
     pub next_document_id: DocumentId,
     pub documents: BTreeMap<DocumentId, Document>,
@@ -1262,6 +1283,8 @@ pub struct Editor {
 
     pub mouse_down_range: Option<Range>,
     pub cursor_cache: CursorCache,
+
+    ime_state: String,
 }
 
 pub type Motion = Box<dyn Fn(&mut Editor)>;
@@ -1385,6 +1408,7 @@ impl Editor {
             mouse_down_range: None,
             cursor_cache: CursorCache::default(),
             dir_stack: VecDeque::with_capacity(DIR_STACK_CAP),
+            ime_state: String::new(),
         }
     }
 
@@ -1411,9 +1435,99 @@ impl Editor {
             self.last_motion = Some(motion);
         }
     }
+
     /// Current editing mode for the [`Editor`].
     pub fn mode(&self) -> Mode {
         self.mode
+    }
+
+    /// Sets the editing mode for the [`Editor`].
+    ///
+    /// This setter function allows for proper IME switching.
+    pub fn set_mode(&mut self, new_mode: Mode) {
+        self.handle_ime(new_mode);
+        self.mode = new_mode;
+    }
+
+    /// Handles IME management during input mode switching
+    pub fn handle_ime(&mut self, new_mode: Mode) {
+        let config = self.config();
+        if !config.ime_management.enabled {
+            return;
+        }
+        match (&config.ime_management.ime_type, self.mode, new_mode) {
+            (ImeManagementConfigType::Fcitx5, Mode::Insert, Mode::Normal | Mode::Select) => {
+                // Record IME variant (using synchronous call here. Not sure if the command system supports async?)
+                match std::process::Command::new("fcitx5-remote")
+                    .arg("-n")
+                    .output()
+                {
+                    Err(err) => {
+                        log::error!("Unable to spawn fcitx5-remote: {err:?}");
+                        return;
+                    }
+                    Ok(output) if !output.status.success() => {
+                        log::error!(
+                            "Unable to get fcitx5 status:\n{}",
+                            String::from_utf8_lossy(&output.stderr)
+                        );
+                        return;
+                    }
+                    Ok(output) => match String::from_utf8(output.stdout) {
+                        Ok(stdout) => {
+                            log::debug!("Successfully captured IME state: {stdout}");
+                            self.ime_state = stdout;
+                        }
+                        Err(err) => {
+                            log::error!("Unable to process fcitx5 status: {err:?}");
+                            return;
+                        }
+                    },
+                }
+                match std::process::Command::new("fcitx5-remote")
+                    .arg("-c")
+                    .output()
+                {
+                    Ok(output) if !output.status.success() => {
+                        log::error!(
+                            "Unable to disable IME: {}",
+                            String::from_utf8_lossy(&output.stderr)
+                        );
+                        return;
+                    }
+                    Ok(_) => {}
+                    Err(err) => {
+                        log::error!("Unable to disable IME: {err:?}");
+                        return;
+                    }
+                }
+            }
+            (ImeManagementConfigType::Fcitx5, Mode::Normal | Mode::Select, Mode::Insert) => {
+                // Re-enable IME from recorded variant
+                if self.ime_state != "" {
+                    match std::process::Command::new("fcitx5-remote")
+                        .arg("-s")
+                        .arg(&self.ime_state.trim())
+                        .output()
+                    {
+                        Ok(output) if !output.status.success() => {
+                            log::error!(
+                                "Unable to set fcitx5 status:\n{}",
+                                String::from_utf8_lossy(&output.stderr)
+                            );
+                            return;
+                        }
+                        Ok(_output) => {
+                            log::debug!("Successfully restored IME state: {}", self.ime_state);
+                        }
+                        Err(err) => {
+                            log::error!("Unable to spawn fcitx5-remote: {err:?}");
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 
     pub fn config(&self) -> DynGuard<Config> {
@@ -2347,7 +2461,7 @@ impl Editor {
             return;
         }
 
-        self.mode = Mode::Normal;
+        self.set_mode(Mode::Normal);
         let (view, doc) = current!(self);
 
         try_restore_indent(doc, view);
