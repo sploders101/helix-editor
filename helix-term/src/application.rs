@@ -60,9 +60,6 @@ type TerminalBackend = CrosstermBackend<std::io::Stdout>;
 #[cfg(feature = "integration")]
 type TerminalBackend = TestBackend;
 
-#[cfg(not(windows))]
-type TerminalEvent = termina::Event;
-#[cfg(windows)]
 type TerminalEvent = crossterm::event::Event;
 
 type Terminal = tui::terminal::Terminal<TerminalBackend>;
@@ -692,9 +689,6 @@ impl Application {
     }
 
     pub async fn handle_terminal_events(&mut self, event: std::io::Result<TerminalEvent>) {
-        #[cfg(not(windows))]
-        use termina::escape::csi;
-
         let mut cx = crate::compositor::Context {
             editor: &mut self.editor,
             jobs: &mut self.jobs,
@@ -702,37 +696,6 @@ impl Application {
         };
         // Handle key events
         let should_redraw = match event.unwrap() {
-            #[cfg(not(windows))]
-            termina::Event::WindowResized(termina::WindowSize { rows, cols, .. }) => {
-                self.terminal
-                    .resize(Rect::new(0, 0, cols, rows))
-                    .expect("Unable to resize terminal");
-
-                let area = self.terminal.size();
-
-                self.compositor.resize(area);
-
-                self.compositor
-                    .handle_event(&Event::Resize(cols, rows), &mut cx)
-            }
-            #[cfg(not(windows))]
-            // Ignore keyboard release events.
-            termina::Event::Key(termina::event::KeyEvent {
-                kind: termina::event::KeyEventKind::Release,
-                ..
-            }) => false,
-            #[cfg(not(windows))]
-            termina::Event::Csi(csi::Csi::Mode(csi::Mode::ReportTheme(mode))) => {
-                self.theme_mode = Some(mode.into());
-                Self::load_configured_theme(
-                    &mut self.editor,
-                    &self.config.load(),
-                    &mut self.terminal,
-                    self.theme_mode,
-                );
-                true
-            }
-            #[cfg(windows)]
             TerminalEvent::Resize(width, height) => {
                 self.terminal
                     .resize(Rect::new(0, 0, width, height))
@@ -745,7 +708,6 @@ impl Application {
                 self.compositor
                     .handle_event(&Event::Resize(width, height), &mut cx)
             }
-            #[cfg(windows)]
             // Ignore keyboard release events.
             crossterm::event::Event::Key(crossterm::event::KeyEvent {
                 kind: crossterm::event::KeyEventKind::Release,
@@ -1257,21 +1219,7 @@ impl Application {
         self.terminal.restore()
     }
 
-    #[cfg(all(not(feature = "integration"), not(windows)))]
-    pub fn event_stream(&self) -> impl Stream<Item = std::io::Result<TerminalEvent>> + Unpin {
-        use termina::{escape::csi, Terminal as _};
-        let reader = self.terminal.backend().terminal().event_reader();
-        termina::EventStream::new(reader, |event| {
-            // Accept either non-escape sequences or theme mode updates.
-            !event.is_escape()
-                || matches!(
-                    event,
-                    termina::Event::Csi(csi::Csi::Mode(csi::Mode::ReportTheme(_)))
-                )
-        })
-    }
-
-    #[cfg(all(not(feature = "integration"), windows))]
+    #[cfg(not(feature = "integration"))]
     pub fn event_stream(&self) -> impl Stream<Item = std::io::Result<TerminalEvent>> + Unpin {
         crossterm::event::EventStream::new()
     }

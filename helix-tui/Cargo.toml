@@ -22,9 +22,7 @@ bitflags.workspace = true
 cassowary = "0.3"
 unicode-segmentation.workspace = true
 termina = { workspace = true, optional = true }
+crossterm = { version = "0.28", optional = true }
 termini = "1.0"
 once_cell = "1.21"
 log = "~0.4"
-
-[target.'cfg(windows)'.dependencies]
-crossterm = { version = "0.28", optional = true }

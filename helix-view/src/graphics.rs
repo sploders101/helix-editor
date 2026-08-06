@@ -394,7 +394,7 @@ impl From<Color> for termina::style::ColorSpec {
     }
 }
 
-#[cfg(all(feature = "term", windows))]
+#[cfg(all(feature = "term"))]
 impl From<Color> for crossterm::style::Color {
     fn from(color: Color) -> Self {
         use crossterm::style::Color as CColor;
@@ -461,7 +461,7 @@ impl From<UnderlineStyle> for termina::style::Underline {
     }
 }
 
-#[cfg(all(feature = "term", windows))]
+#[cfg(all(feature = "term"))]
 impl From<UnderlineStyle> for crossterm::style::Attribute {
     fn from(style: UnderlineStyle) -> Self {
         match style {

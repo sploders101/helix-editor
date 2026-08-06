@@ -60,7 +60,7 @@ impl From<termina::event::Modifiers> for KeyModifiers {
     }
 }
 
-#[cfg(all(feature = "term", windows))]
+#[cfg(all(feature = "term"))]
 impl From<KeyModifiers> for crossterm::event::KeyModifiers {
     fn from(key_modifiers: KeyModifiers) -> Self {
         use crossterm::event::KeyModifiers as CKeyModifiers;
@@ -84,7 +84,7 @@ impl From<KeyModifiers> for crossterm::event::KeyModifiers {
     }
 }
 
-#[cfg(all(feature = "term", windows))]
+#[cfg(all(feature = "term"))]
 impl From<crossterm::event::KeyModifiers> for KeyModifiers {
     fn from(val: crossterm::event::KeyModifiers) -> Self {
         use crossterm::event::KeyModifiers as CKeyModifiers;
@@ -184,7 +184,7 @@ impl From<termina::event::MediaKeyCode> for MediaKeyCode {
     }
 }
 
-#[cfg(all(feature = "term", windows))]
+#[cfg(all(feature = "term"))]
 impl From<MediaKeyCode> for crossterm::event::MediaKeyCode {
     fn from(media_key_code: MediaKeyCode) -> Self {
         use crossterm::event::MediaKeyCode as CMediaKeyCode;
@@ -207,7 +207,7 @@ impl From<MediaKeyCode> for crossterm::event::MediaKeyCode {
     }
 }
 
-#[cfg(all(feature = "term", windows))]
+#[cfg(all(feature = "term"))]
 impl From<crossterm::event::MediaKeyCode> for MediaKeyCode {
     fn from(val: crossterm::event::MediaKeyCode) -> Self {
         use crossterm::event::MediaKeyCode as CMediaKeyCode;
@@ -310,7 +310,7 @@ impl From<termina::event::ModifierKeyCode> for ModifierKeyCode {
     }
 }
 
-#[cfg(all(feature = "term", windows))]
+#[cfg(all(feature = "term"))]
 impl From<ModifierKeyCode> for crossterm::event::ModifierKeyCode {
     fn from(modifier_key_code: ModifierKeyCode) -> Self {
         use crossterm::event::ModifierKeyCode as CModifierKeyCode;
@@ -334,7 +334,7 @@ impl From<ModifierKeyCode> for crossterm::event::ModifierKeyCode {
     }
 }
 
-#[cfg(all(feature = "term", windows))]
+#[cfg(all(feature = "term"))]
 impl From<crossterm::event::ModifierKeyCode> for ModifierKeyCode {
     fn from(val: crossterm::event::ModifierKeyCode) -> Self {
         use crossterm::event::ModifierKeyCode as CModifierKeyCode;
@@ -491,7 +491,7 @@ impl From<termina::event::KeyCode> for KeyCode {
     }
 }
 
-#[cfg(all(feature = "term", windows))]
+#[cfg(all(feature = "term"))]
 impl From<KeyCode> for crossterm::event::KeyCode {
     fn from(key_code: KeyCode) -> Self {
         use crossterm::event::KeyCode as CKeyCode;
@@ -527,7 +527,7 @@ impl From<KeyCode> for crossterm::event::KeyCode {
     }
 }
 
-#[cfg(all(feature = "term", windows))]
+#[cfg(all(feature = "term"))]
 impl From<crossterm::event::KeyCode> for KeyCode {
     fn from(val: crossterm::event::KeyCode) -> Self {
         use crossterm::event::KeyCode as CKeyCode;
